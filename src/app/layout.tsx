@@ -1,10 +1,10 @@
-import './globals.css'
+import '../globals.css'
 import { Inter } from 'next/font/google'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata = {
-  title: 'Lido Isola del Pescatore',
+  title: 'Stabilimento Santa Severa',
   description: 'Prenotazione ombrelloni online',
 }
 
