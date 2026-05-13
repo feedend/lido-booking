@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase'; // Il client che abbiamo creato prima
+import { supabase } from '../../lib/supabase'; // Il client che abbiamo creato prima
 
 // Definiamo cosa è un "Ombrellone" per TypeScript
 interface Spot {
