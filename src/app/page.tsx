@@ -7,7 +7,7 @@ export default function Home() {
   return (
     <main className="min-h-screen p-4 md:p-8 bg-slate-50">
       <h1 className="text-2xl font-bold mb-6 text-center text-blue-900">
-        Isola del Pescatore - Mappa Ombrelloni
+        Stabilimento Santa Severa - Mappa Ombrelloni
       </h1>
       
       {/* Passiamo la data richiesta al componente */}
