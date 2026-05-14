@@ -1,46 +1,56 @@
 'use client';
-import { useState } from 'react';
-import BookingForm from '@/components/booking/BookingForm';
-import CalendarStep from '@/components/booking/CalendarStep';
-import BeachMap from '@/components/map/BeachMap';
+import React, { useState } from 'react';
 
-export default function Home() {
-  const [step, setStep] = useState(1); // 1: Form, 2: Calendario, 3: Mappa
-  const [userData, setUserData] = useState<any>(null);
-  const [selectedDate, setSelectedDate] = useState('');
+type CalendarProps = {
+  categoria: string;
+  onDateSelect: (date: string) => void;
+};
 
-  const handleFormComplete = (data: any) => {
-    setUserData(data);
-    setStep(2);
+export default function CalendarStep({ categoria, onDateSelect }: CalendarProps) {
+  const today = new Date();
+  
+  // Calcolo del limite giorni in base alla categoria
+  const getDaysAhead = (cat: string) => {
+    switch (cat) {
+      case 'Esercito': return 7;
+      case 'Esercito in quiescenza': return 5;
+      case 'Altra Forza Armata': return 1;
+      case 'Esercito - Parenti': return 1;
+      default: return 0;
+    }
   };
 
-  const handleDateSelect = (date: string) => {
-    setSelectedDate(date);
-    setStep(3);
-  };
+  const daysAhead = getDaysAhead(categoria);
+  const maxDate = new Date();
+  maxDate.setDate(today.getDate() + daysAhead);
+
+  // Formattazione per l'input date (YYYY-MM-DD)
+  const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
   return (
-    <main className="min-h-screen bg-slate-100 py-12 px-4">
-      {/* Header riassuntivo visibile dopo il primo step */}
-      {step > 1 && (
-        <div className="bg-white p-4 rounded-2xl shadow-md max-w-lg mx-auto text-center border-l-4 border-blue-500 mb-8">
-          <p className="text-slate-600">Bagnante: <span className="font-bold text-blue-900">{userData.nome} {userData.cognome}</span></p>
-          <p className="text-xs text-slate-400 uppercase tracking-widest mt-1">
-            {userData.categoria} • {selectedDate ? `Data: ${selectedDate}` : 'Selezione data...'}
-          </p>
-        </div>
-      )}
+    <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-blue-50 text-center">
+      <div className="mb-6">
+        <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase">
+          Priorità: {daysAhead} {daysAhead === 1 ? 'Giorno' : 'Giorni'}
+        </span>
+      </div>
+      
+      <h2 className="text-xl font-bold text-slate-800 mb-2">Seleziona la Data</h2>
+      <p className="text-sm text-slate-500 mb-6">
+        In base alla tua categoria, puoi prenotare fino al {maxDate.toLocaleDateString('it-IT')}
+      </p>
 
-      {step === 1 && <BookingForm onComplete={handleFormComplete} />}
-      
-      {step === 2 && (
-        <CalendarStep 
-          categoria={userData.categoria} 
-          onDateSelect={handleDateSelect} 
-        />
-      )}
-      
-      {step === 3 && <BeachMap selectedDate={selectedDate} />}
-    </main>
+      <input 
+        type="date"
+        min={formatDate(today)}
+        max={formatDate(maxDate)}
+        className="w-full p-4 rounded-xl bg-slate-50 border-2 border-blue-100 focus:border-blue-500 outline-none text-lg font-medium mb-6"
+        onChange={(e) => onDateSelect(e.target.value)}
+      />
+
+      <div className="text-[10px] text-slate-400 uppercase tracking-tighter">
+        Sistema di prenotazione anticipata - Isola del Pescatore
+      </div>
+    </div>
   );
 }
