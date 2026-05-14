@@ -82,7 +82,7 @@ export default function BeachMap({ selectedDate }: { selectedDate: string }) {
       </div>
 
       <div className="mt-12 text-[10px] text-slate-400 italic uppercase tracking-widest">
-        Zona civitavecchia (140-174)
+       Ombrelloni Lato Civitavecchia (11-174)
       </div>
     </div>
   );
