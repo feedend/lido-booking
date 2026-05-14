@@ -31,7 +31,7 @@ export default function BeachMap({ selectedDate }: { selectedDate: string }) {
     { startL: 81, endL: 90, startR: 91, endR: 100, center: "a" },
     { startL: 101, endL: 110, startR: 111, endR: 120, center: "s" },
     { startL: 121, endL: 129, startR: 130, endR: 139, center: "s" }, // riga r/e
-    { startL: 140, endL: 146, startR: 147, endR: 154, center: "e" }, // zona Tavecchia
+    { startL: 140, endL: 146, startR: 147, endR: 154, center: "e" }, // zona civitavecchia
     { startL: 155, endL: 160, startR: 161, endR: 167, center: "r" },
     { startL: null, endL: null, startR: 168, endR: 171, center: "a" },
     { startL: null, endL: null, startR: 172, endR: 174, center: "" },
@@ -82,7 +82,7 @@ export default function BeachMap({ selectedDate }: { selectedDate: string }) {
       </div>
 
       <div className="mt-12 text-[10px] text-slate-400 italic uppercase tracking-widest">
-        Zona Tavecchia (140-174)
+        Zona civitavecchia (140-174)
       </div>
     </div>
   );
