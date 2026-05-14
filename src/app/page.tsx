@@ -9,7 +9,7 @@ export default function Home() {
       <div className="max-w-5xl mx-auto bg-white shadow-xl rounded-2xl overflow-hidden">
         <div className="p-6 bg-blue-600 text-white text-center">
           <h1 className="text-2xl font-bold uppercase tracking-wide">
-            Isola del Pescatore
+            Stabilimento Santa Severa
           </h1>
           <p className="text-blue-100 text-sm">Gestione Mappa Ombrelloni</p>
         </div>
