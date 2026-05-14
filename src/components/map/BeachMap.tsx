@@ -1,12 +1,12 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase'; // Il client che abbiamo creato prima
+// Importiamo direttamente la libreria invece di passare per il file lib
+import { createClient } from '@supabase/supabase-js';
 
-// Definiamo cosa è un "Ombrellone" per TypeScript
-interface Spot {
-  internal_code: string;
-  status: 'available' | 'booked' | 'selected';
-}
+// Inizializziamo il client qui per evitare errori di percorso del modulo
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function BeachMap({ selectedDate }: { selectedDate: string }) {
   const [bookedSpots, setBookedSpots] = useState<string[]>([]);
