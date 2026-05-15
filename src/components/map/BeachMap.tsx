@@ -19,7 +19,6 @@ type BeachMapProps = {
 };
 
 export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
-  // Salveremo direttamente i numeri degli ombrelloni occupati (es: [1, 5, 22])
   const [reservedSpots, setReservedSpots] = useState<number[]>([]);
   const [selectedSpotNumber, setSelectedSpotNumber] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,16 +29,13 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     const loadBookings = async () => {
       setIsLoading(true);
       try {
-        // Scarica le prenotazioni del giorno direttamente usando il numero come identificativo
         const { data: bookingsData } = await supabase
           .from('bookings')
           .select('booking_category, status') 
-          // Usiamo temporaneamente booking_category o un campo di testo se non hai inserito gli UUID
           .eq('booking_date', selectedDate)
           .not('status', 'eq', 'cancelled');
 
         if (bookingsData) {
-          // Estrae i numeri memorizzati (convertendoli in numero per la mappa)
           const occupati = bookingsData
             .map(b => parseInt(b.booking_category.split('|')[0]))
             .filter(num => !isNaN(num));
@@ -60,15 +56,12 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     setIsSubmitting(true);
 
     try {
-      // Inseriamo la prenotazione salvando il numero dell'ombrellone nel campo di testo 
-      // per aggirare il problema dell'UUID mancante
       const { error } = await supabase
         .from('bookings')
         .insert([
           {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
-            // Salviamo nel formato "NUMERO | CATEGORIA" per avere sia il posto che la tariffa nello stesso campo text
             booking_category: `${selectedSpotNumber} | ${userData.categoria}`,
             status: 'confirmed'
           }
@@ -107,32 +100,32 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   const renderSpot = (num: number) => {
     const isDbReserved = reservedSpots.includes(num);
-    const isCsmReserved = num >= 11 && num <= 15; // CSM fisso dal PDF
+    const isCsmReserved = num >= 11 && num <= 15;
     const isReserved = isDbReserved || isCsmReserved;
 
     return (
       <div
         key={num}
         onClick={() => !isReserved && setSelectedSpotNumber(num)}
-        className={`relative w-12 h-14 flex flex-col items-center justify-center transition-all duration-150 select-none
+        className={`relative w-11 h-14 flex flex-col items-center justify-center transition-all duration-150 select-none shrink-0
           ${isReserved ? 'text-gray-400 cursor-not-allowed' : 'text-blue-500 hover:scale-110 cursor-pointer'}`}
       >
         <svg 
           viewBox="0 0 24 24" 
-          className={`w-10 h-10 drop-shadow-sm transition-colors ${isReserved ? 'fill-gray-400' : 'fill-blue-500 hover:fill-blue-600'}`}
+          className={`w-9 h-9 drop-shadow-sm transition-colors ${isReserved ? 'fill-gray-300' : 'fill-blue-500 hover:fill-blue-600'}`}
         >
           <path d="M12 2C6.48 2 2 6.48 2 12h20c0-5.52-4.48-10-10-10z" />
           <path d="M12 2v10M7 4.5L12 12M17 4.5L12 12" stroke="white" strokeWidth="0.5" strokeLinecap="round" />
           <path d="M11.5 12h1v9h-1z" fill="#94a3b8" />
         </svg>
 
-        <span className={`text-[10px] font-black mt-0.5 px-1 rounded bg-white/80 shadow-sm border
-          ${isReserved ? 'text-gray-500 border-gray-200' : 'text-blue-900 border-blue-100'}`}>
+        <span className={`text-[9px] font-black mt-0.5 px-1 rounded bg-white/90 shadow-sm border
+          ${isReserved ? 'text-gray-400 border-gray-200' : 'text-blue-900 border-blue-100'}`}>
           {num}
         </span>
 
         {isReserved && (
-          <div className="absolute top-2 w-7 h-7 flex items-center justify-center bg-red-600/90 text-white font-extrabold text-[10px] rounded-full shadow-md">
+          <div className="absolute top-1.5 w-6 h-6 flex items-center justify-center bg-red-500/90 text-white font-extrabold text-[9px] rounded-full shadow-md">
             ✕
           </div>
         )}
@@ -150,33 +143,53 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   }
 
   return (
-    <div className="flex flex-col items-center bg-orange-50/60 p-6 rounded-3xl shadow-xl border border-orange-100 max-w-4xl mx-auto overflow-x-auto relative">
-      <div className="w-full text-center py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-2xl font-black text-white tracking-[1.5em] uppercase text-sm shadow-md mb-8">
+    <div className="w-full max-w-4xl mx-auto bg-orange-50/60 p-4 sm:p-6 rounded-3xl shadow-xl border border-orange-100 relative">
+      
+      {/* Indicatore visivo di scorrimento per gli smartphone */}
+      <div className="block md:hidden text-center text-[10px] text-orange-700/60 font-bold uppercase tracking-wider mb-2 animate-pulse">
+        ↔ Scorri lateralmente per vedere tutta la spiaggia ↔
+      </div>
+
+      {/* Visualizzazione Mare (fissa, non scorre per dare un punto di riferimento stiloso) */}
+      <div className="w-full text-center py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-2xl font-black text-white tracking-[0.8em] sm:tracking-[1.5em] uppercase text-xs sm:text-sm shadow-md mb-6 sticky left-0">
         ~~~ MARE ~~~
       </div>
 
-      <div className="flex flex-col gap-2 min-w-[720px]">
-        {rows.map((row, rowIndex) => (
-          <div key={rowIndex} className="flex items-center justify-center gap-6">
-            <div className="flex gap-1.5 w-[320px] justify-end">
-              {row.startL && Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderSpot)}
+      {/* CONTENITORE RESPONSIVE CON SCORRIMENTO ORIZZONTALE */}
+      <div className="w-full overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-orange-200 scrollbar-track-transparent rounded-xl">
+        
+        {/* Griglia della Spiaggia con larghezza minima protetta */}
+        <div className="flex flex-col gap-2 min-w-[760px] mx-auto px-2">
+          {rows.map((row, rowIndex) => (
+            <div key={rowIndex} className="flex items-center justify-center gap-4">
+              
+              {/* Settore Sinistro */}
+              <div className="flex gap-1 w-[340px] justify-end">
+                {row.startL && Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderSpot)}
+              </div>
+              
+              {/* Passerella / Servizi Centrali */}
+              <div className="w-10 shrink-0 flex justify-center font-black text-amber-700 uppercase text-[10px] tracking-wider bg-yellow-100/90 py-1.5 rounded-xl border border-yellow-200/60 shadow-inner">
+                {row.center || "•"}
+              </div>
+              
+              {/* Settore Destro */}
+              <div className="flex gap-1 w-[340px]">
+                {row.startR && Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderSpot)}
+              </div>
+
             </div>
-            <div className="w-8 flex justify-center font-black text-amber-600 uppercase text-xs tracking-wider bg-yellow-100/80 py-1 rounded border border-yellow-200 shadow-sm">
-              {row.center || " "}
-            </div>
-            <div className="flex gap-1.5 w-[320px]">
-              {row.startR && Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderSpot)}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
+      {/* Modale Pop-up di Conferma */}
       {selectedSpotNumber !== null && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center border border-slate-100 scale-in duration-200">
             {bookingSuccess ? (
               <div className="py-6">
-                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">✓</div>
+                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 animate-bounce">✓</div>
                 <h3 className="text-xl font-bold text-slate-800">Prenotato!</h3>
                 <p className="text-sm text-slate-500 mt-1">Ombrellone n° {selectedSpotNumber} bloccato con successo.</p>
               </div>
@@ -187,10 +200,10 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                   Vuoi riservare l'ombrellone <span className="font-extrabold text-blue-600 text-lg">N° {selectedSpotNumber}</span> per il giorno <span className="font-semibold text-slate-800">{new Date(selectedDate).toLocaleDateString('it-IT')}</span>?
                 </p>
                 
-                <div className="bg-slate-50 p-3 rounded-xl text-left text-xs space-y-1.5 text-slate-600 border mb-6">
-                  <p><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
-                  <p><strong>Email:</strong> {userData.email}</p>
-                  <p><strong>Componenti:</strong> {userData.numUtenti} persone</p>
+                <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-6">
+                  <p className="border-b border-slate-200/60 pb-1"><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
+                  <p className="border-b border-slate-200/60 pb-1"><strong>Email:</strong> {userData.email}</p>
+                  <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} persone</p>
                   <p><strong>Tariffa applicata:</strong> {userData.categoria}</p>
                 </div>
 
@@ -198,14 +211,14 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                   <button
                     disabled={isSubmitting}
                     onClick={() => setSelectedSpotNumber(null)}
-                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-all"
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-all text-sm"
                   >
                     Annulla
                   </button>
                   <button
                     disabled={isSubmitting}
                     onClick={handleConfirmBooking}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all flex items-center justify-center"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center"
                   >
                     {isSubmitting ? "Salvataggio..." : "Conferma"}
                   </button>
