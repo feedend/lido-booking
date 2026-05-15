@@ -84,8 +84,9 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     }
   };
 
+  // CONFIGURAZIONE RIGHE AGGIORNATA: La prima fila a sinistra parte da 4 invece che da 1
   const rows = [
-    { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
+    { startL: 4, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
     { startL: 41, endL: 50, startR: 51, endR: 60, center: "" },
     { startL: 61, endL: 70, startR: 71, endR: 80, center: "P" },
@@ -100,7 +101,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   const renderSpot = (num: number) => {
     const isDbReserved = reservedSpots.includes(num);
-    const isCsmReserved = num >= 11 && num <= 15;
+    const isCsmReserved = num >= 11 && num <= 15; // CSM fisso dal PDF
     const isReserved = isDbReserved || isCsmReserved;
 
     return (
@@ -150,22 +151,27 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         ↔ Scorri lateralmente per vedere tutta la spiaggia ↔
       </div>
 
-      {/* Visualizzazione Mare (fissa, non scorre per dare un punto di riferimento stiloso) */}
+      {/* Visualizzazione Mare */}
       <div className="w-full text-center py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-2xl font-black text-white tracking-[0.8em] sm:tracking-[1.5em] uppercase text-xs sm:text-sm shadow-md mb-6 sticky left-0">
         ~~~ MARE ~~~
       </div>
 
-      {/* CONTENITORE RESPONSIVE CON SCORRIMENTO ORIZZONTALE */}
+      {/* CONTENITORE CON SCORRIMENTO ORIZZONTALE */}
       <div className="w-full overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-orange-200 scrollbar-track-transparent rounded-xl">
         
-        {/* Griglia della Spiaggia con larghezza minima protetta */}
+        {/* Griglia della Spiaggia con allineamento e spaziature fisse per mantenere la simmetria */}
         <div className="flex flex-col gap-2 min-w-[760px] mx-auto px-2">
           {rows.map((row, rowIndex) => (
             <div key={rowIndex} className="flex items-center justify-center gap-4">
               
-              {/* Settore Sinistro */}
-              <div className="flex gap-1 w-[340px] justify-end">
+              {/* Settore Sinistro: Gestisce anche lo spazio vuoto se mancano degli ombrelloni (come l'1, 2, 3) */}
+              <div className="flex gap-1 w-[340px] justify-end items-center">
                 {row.startL && Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderSpot)}
+                
+                {/* Se è la prima riga e parte da 4, aggiungiamo un blocco invisibile della dimensione esatta di 3 ombrelloni per non far disallineare la griglia rispetto al bagnino */}
+                {rowIndex === 0 && row.startL === 4 && (
+                  <div className="w-[144px] h-14 shrink-0 pointer-events-none" aria-hidden="true" />
+                )}
               </div>
               
               {/* Passerella / Servizi Centrali */}
