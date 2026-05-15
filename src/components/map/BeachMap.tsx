@@ -84,7 +84,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     }
   };
 
-  // CONFIGURAZIONE RIGHE CORRETTA: La prima fila a sinistra va regolarmente da 1 a 10
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
@@ -101,14 +100,14 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   const renderSpot = (num: number) => {
     const isDbReserved = reservedSpots.includes(num);
-    const isCsmReserved = num >= 11 && num <= 15; // CSM fisso dal PDF
+    const isCsmReserved = num >= 11 && num <= 15;
     const isReserved = isDbReserved || isCsmReserved;
 
     return (
       <div
         key={num}
         onClick={() => !isReserved && setSelectedSpotNumber(num)}
-        className={`relative w-11 h-14 flex flex-col items-center justify-center transition-all duration-150 select-none shrink-0
+        className={`relative w-11 h-14 flex flex-col items-center justify-center transition-all duration-150 select-none mx-auto
           ${isReserved ? 'text-gray-400 cursor-not-allowed' : 'text-blue-500 hover:scale-110 cursor-pointer'}`}
       >
         <svg 
@@ -144,91 +143,43 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto bg-orange-50/60 p-4 sm:p-6 rounded-3xl shadow-xl border border-orange-100 relative">
+    <div className="w-full max-w-5xl mx-auto bg-orange-50/60 p-4 sm:p-6 rounded-3xl shadow-xl border border-orange-100 relative">
       
-      {/* Indicatore visivo di scorrimento per gli smartphone */}
       <div className="block md:hidden text-center text-[10px] text-orange-700/60 font-bold uppercase tracking-wider mb-2 animate-pulse">
         ↔ Scorri lateralmente per vedere tutta la spiaggia ↔
       </div>
 
-      {/* Visualizzazione Mare */}
       <div className="w-full text-center py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-2xl font-black text-white tracking-[0.8em] sm:tracking-[1.5em] uppercase text-xs sm:text-sm shadow-md mb-6 sticky left-0">
         ~~~ MARE ~~~
       </div>
 
-      {/* CONTENITORE CON SCORRIMENTO ORIZZONTALE */}
+      {/* CONTENITORE PRINCIPALE CON SCORRIMENTO */}
       <div className="w-full overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-orange-200 scrollbar-track-transparent rounded-xl">
         
-        {/* Griglia della Spiaggia */}
-        <div className="flex flex-col gap-2 min-w-[760px] mx-auto px-2">
+        {/* LA SPIAGGIA: Aumentata la larghezza minima totale a 1000px per dare ampio respiro visivo */}
+        <div className="flex flex-col gap-3 min-w-[1000px] mx-auto px-4">
           {rows.map((row, rowIndex) => (
-            <div key={rowIndex} className="flex items-center justify-center gap-4">
+            <div key={rowIndex} className="flex items-center justify-center gap-6">
               
-              {/* Settore Sinistro standard e pulito */}
-              <div className="flex gap-1 w-[340px] justify-end items-center">
-                {row.startL && Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderSpot)}
+              {/* SETTORE SINISTRO BILANCIATO: Griglia fissa a 10 colonne da 44px ciascuna (Totale 440px fisse) */}
+              <div className="w-[440px] grid grid-cols-10 gap-0.5 justify-items-end">
+                {row.startL ? (
+                  <>
+                    {/* Genera gli spazi vuoti iniziali se la riga non ha il numero massimo di elementi per tenerli allineati a destra sulla passerella */}
+                    {Array.from({ length: 10 - (row.endL! - row.startL! + 1) }).map((_, i) => (
+                      <div key={`empty-l-${i}`} className="w-11 h-14 opacity-0 pointer-events-none" />
+                    ))}
+                    {Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderSpot)}
+                  </>
+                ) : (
+                  // Se la riga non ha un blocco sinistro (ultime file), riempiamo con 10 spazi vuoti trasparenti
+                  Array.from({ length: 10 }).map((_, i) => <div key={`blank-l-${i}`} className="w-11 h-14" />)
+                )}
               </div>
               
-              {/* Passerella / Servizi Centrali */}
-              <div className="w-10 shrink-0 flex justify-center font-black text-amber-700 uppercase text-[10px] tracking-wider bg-yellow-100/90 py-1.5 rounded-xl border border-yellow-200/60 shadow-inner">
+              {/* PASSERELLA CENTRALE */}
+              <div className="w-12 shrink-0 flex justify-center items-center font-black text-amber-700 uppercase text-[10px] tracking-wider bg-yellow-100/90 py-2 rounded-xl border border-yellow-200/60 shadow-inner">
                 {row.center || "•"}
               </div>
               
-              {/* Settore Destro */}
-              <div className="flex gap-1 w-[340px]">
-                {row.startR && Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderSpot)}
-              </div>
-
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Modale Pop-up di Conferma */}
-      {selectedSpotNumber !== null && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center border border-slate-100 scale-in duration-200">
-            {bookingSuccess ? (
-              <div className="py-6">
-                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 animate-bounce">✓</div>
-                <h3 className="text-xl font-bold text-slate-800">Prenotato!</h3>
-                <p className="text-sm text-slate-500 mt-1">Ombrellone n° {selectedSpotNumber} bloccato con successo.</p>
-              </div>
-            ) : (
-              <>
-                <h3 className="text-lg font-black text-blue-900 uppercase tracking-tight mb-2">Conferma Selezione</h3>
-                <p className="text-sm text-slate-600 mb-6">
-                  Vuoi riservare l'ombrellone <span className="font-extrabold text-blue-600 text-lg">N° {selectedSpotNumber}</span> per il giorno <span className="font-semibold text-slate-800">{new Date(selectedDate).toLocaleDateString('it-IT')}</span>?
-                </p>
-                
-                <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-6">
-                  <p className="border-b border-slate-200/60 pb-1"><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
-                  <p className="border-b border-slate-200/60 pb-1"><strong>Email:</strong> {userData.email}</p>
-                  <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} people</p>
-                  <p><strong>Tariffa applicata:</strong> {userData.categoria}</p>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    disabled={isSubmitting}
-                    onClick={() => setSelectedSpotNumber(null)}
-                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-all text-sm"
-                  >
-                    Annulla
-                  </button>
-                  <button
-                    disabled={isSubmitting}
-                    onClick={handleConfirmBooking}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center"
-                  >
-                    {isSubmitting ? "Salvataggio..." : "Conferma"}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+              {/* SET
