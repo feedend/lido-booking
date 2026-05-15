@@ -18,109 +18,76 @@ type BeachMapProps = {
   };
 };
 
-type SpotData = {
-  id: string;
-  internal_code: string | number;
-  zone_id: string;
-};
-
 export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
-  const [dbSpots, setDbSpots] = useState<SpotData[]>([]);
-  const [reservedSpotIds, setReservedSpotIds] = useState<string[]>([]);
+  // Salveremo direttamente i numeri degli ombrelloni occupati (es: [1, 5, 22])
+  const [reservedSpots, setReservedSpots] = useState<number[]>([]);
   const [selectedSpotNumber, setSelectedSpotNumber] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const loadBeachData = async () => {
+    const loadBookings = async () => {
       setIsLoading(true);
       try {
-        // Scarica tutti gli ombrelloni attivi
-        const { data: spotsData, error: spotsError } = await supabase
-          .from('spots')
-          .select('*') // Prendiamo tutte le colonne per evitare disallineamenti di nomi
-          .eq('is_active', true);
-
-        if (spotsError) console.error("Errore download spots:", spotsError);
-        if (spotsData) setDbSpots(spotsData);
-
-        // Scarica le prenotazioni del giorno
+        // Scarica le prenotazioni del giorno direttamente usando il numero come identificativo
         const { data: bookingsData } = await supabase
           .from('bookings')
-          .select('spot_id')
+          .select('booking_category, status') 
+          // Usiamo temporaneamente booking_category o un campo di testo se non hai inserito gli UUID
           .eq('booking_date', selectedDate)
           .not('status', 'eq', 'cancelled');
 
         if (bookingsData) {
-          setReservedSpotIds(bookingsData.map(b => b.spot_id));
+          // Estrae i numeri memorizzati (convertendoli in numero per la mappa)
+          const occupati = bookingsData
+            .map(b => parseInt(b.booking_category.split('|')[0]))
+            .filter(num => !isNaN(num));
+          setReservedSpots(occupati);
         }
       } catch (err) {
-        console.error("Errore nel caricamento dati:", err);
+        console.error("Errore nel caricamento delle prenotazioni:", err);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadBeachData();
+    loadBookings();
   }, [selectedDate]);
-
-  // Funzione helper fondamentale per pulire i codici da spazi, invii a capo o caratteri nascosti
-  const cleanCode = (val: any): string => {
-    if (val === null || val === undefined) return '';
-    return String(val).replace(/\D/g, ''); // Tiene SOLO i numeri eliminando spazi, \n, \r o lettere
-  };
 
   const handleConfirmBooking = async () => {
     if (selectedSpotNumber === null) return;
-    
-    const clickedClean = cleanCode(selectedSpotNumber);
-
-    // Cerca lo spot confrontando SOLO i numeri puri estratti
-    const targetSpot = dbSpots.find(s => {
-      // Gestiamo sia se la colonna si chiama internal_code sia se ci sono varianti
-      const dbCode = s.internal_code || (s as any).internal_code;
-      return cleanCode(dbCode) === clickedClean;
-    });
-
-    // Se continua a non trovarlo, l'alert ora ti mostrerà esattamente cosa ha scaricato dal DB per aiutarti a capire
-    if (!targetSpot) {
-      const campioniDb = dbSpots.slice(0, 3).map(s => `"${s.internal_code}" (ID: ${s.id})`).join(', ');
-      alert(
-        `ERRORE DI COINVOLGIMENTO:\n\n` +
-        `Hai cliccato l'ombrellone: "${selectedSpotNumber}" (pulito: "${clickedClean}")\n` +
-        `Totale ombrelloni scaricati dal DB: ${dbSpots.length}\n` +
-        `Primi 3 ombrelloni trovati nel DB: [${campioniDb}]\n\n` +
-        `Se il totale è 0, la tabella 'spots' è vuota o 'is_active' è false. Se i codici differiscono, controlla gli spazi.`
-      );
-      return;
-    }
-
     setIsSubmitting(true);
 
-    const { error } = await supabase
-      .from('bookings')
-      .insert([
-        {
-          spot_id: targetSpot.id,
-          booking_date: selectedDate,
-          num_guests: userData.numUtenti,
-          booking_category: userData.categoria,
-          status: 'confirmed'
-        }
-      ]);
+    try {
+      // Inseriamo la prenotazione salvando il numero dell'ombrellone nel campo di testo 
+      // per aggirare il problema dell'UUID mancante
+      const { error } = await supabase
+        .from('bookings')
+        .insert([
+          {
+            booking_date: selectedDate,
+            num_guests: userData.numUtenti,
+            // Salviamo nel formato "NUMERO | CATEGORIA" per avere sia il posto che la tariffa nello stesso campo text
+            booking_category: `${selectedSpotNumber} | ${userData.categoria}`,
+            status: 'confirmed'
+          }
+        ]);
 
-    setIsSubmitting(false);
-
-    if (error) {
-      alert("Errore durante il salvataggio: " + error.message);
-    } else {
-      setBookingSuccess(true);
-      setReservedSpotIds([...reservedSpotIds, targetSpot.id]);
-      setTimeout(() => {
-        setBookingSuccess(false);
-        setSelectedSpotNumber(null);
-      }, 2500);
+      if (error) {
+        alert("Errore durante il salvataggio: " + error.message);
+      } else {
+        setBookingSuccess(true);
+        setReservedSpots([...reservedSpots, selectedSpotNumber]);
+        setTimeout(() => {
+          setBookingSuccess(false);
+          setSelectedSpotNumber(null);
+        }, 2500);
+      }
+    } catch (err) {
+      alert("Errore di rete o configurazione.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -139,10 +106,8 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   ];
 
   const renderSpot = (num: number) => {
-    const currentSpot = dbSpots.find(s => cleanCode(s.internal_code) === cleanCode(num));
-    
-    const isDbReserved = currentSpot ? reservedSpotIds.includes(currentSpot.id) : false;
-    const isCsmReserved = num >= 11 && num <= 15;
+    const isDbReserved = reservedSpots.includes(num);
+    const isCsmReserved = num >= 11 && num <= 15; // CSM fisso dal PDF
     const isReserved = isDbReserved || isCsmReserved;
 
     return (
