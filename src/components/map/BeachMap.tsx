@@ -36,17 +36,16 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     const loadBeachData = async () => {
       setIsLoading(true);
       try {
-        // 1. Scarica tutti gli ombrelloni attivi
-        const { data: spotsData } = await supabase
+        // Scarica tutti gli ombrelloni attivi
+        const { data: spotsData, error: spotsError } = await supabase
           .from('spots')
-          .select('id, internal_code, zone_id')
+          .select('*') // Prendiamo tutte le colonne per evitare disallineamenti di nomi
           .eq('is_active', true);
 
-        if (spotsData) {
-          setDbSpots(spotsData);
-        }
+        if (spotsError) console.error("Errore download spots:", spotsError);
+        if (spotsData) setDbSpots(spotsData);
 
-        // 2. Scarica le prenotazioni del giorno
+        // Scarica le prenotazioni del giorno
         const { data: bookingsData } = await supabase
           .from('bookings')
           .select('spot_id')
@@ -66,16 +65,34 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     loadBeachData();
   }, [selectedDate]);
 
+  // Funzione helper fondamentale per pulire i codici da spazi, invii a capo o caratteri nascosti
+  const cleanCode = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    return String(val).replace(/\D/g, ''); // Tiene SOLO i numeri eliminando spazi, \n, \r o lettere
+  };
+
   const handleConfirmBooking = async () => {
     if (selectedSpotNumber === null) return;
     
-    // CONVERSIONE DI SICUREZZA: Confrontiamo trasformando entrambi in stringa pulita
-    const targetSpot = dbSpots.find(
-      s => String(s.internal_code).trim() === String(selectedSpotNumber).trim()
-    );
+    const clickedClean = cleanCode(selectedSpotNumber);
 
+    // Cerca lo spot confrontando SOLO i numeri puri estratti
+    const targetSpot = dbSpots.find(s => {
+      // Gestiamo sia se la colonna si chiama internal_code sia se ci sono varianti
+      const dbCode = s.internal_code || (s as any).internal_code;
+      return cleanCode(dbCode) === clickedClean;
+    });
+
+    // Se continua a non trovarlo, l'alert ora ti mostrerà esattamente cosa ha scaricato dal DB per aiutarti a capire
     if (!targetSpot) {
-      alert(`Errore: L'ombrellone N° ${selectedSpotNumber} non è stato trovato nella tabella 'spots' del database. Verifica il contenuto della tabella.`);
+      const campioniDb = dbSpots.slice(0, 3).map(s => `"${s.internal_code}" (ID: ${s.id})`).join(', ');
+      alert(
+        `ERRORE DI COINVOLGIMENTO:\n\n` +
+        `Hai cliccato l'ombrellone: "${selectedSpotNumber}" (pulito: "${clickedClean}")\n` +
+        `Totale ombrelloni scaricati dal DB: ${dbSpots.length}\n` +
+        `Primi 3 ombrelloni trovati nel DB: [${campioniDb}]\n\n` +
+        `Se il totale è 0, la tabella 'spots' è vuota o 'is_active' è false. Se i codici differiscono, controlla gli spazi.`
+      );
       return;
     }
 
@@ -122,13 +139,10 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   ];
 
   const renderSpot = (num: number) => {
-    // CONVERSIONE DI SICUREZZA anche qui per il rendering delle icone
-    const currentSpot = dbSpots.find(
-      s => String(s.internal_code).trim() === String(num).trim()
-    );
+    const currentSpot = dbSpots.find(s => cleanCode(s.internal_code) === cleanCode(num));
     
     const isDbReserved = currentSpot ? reservedSpotIds.includes(currentSpot.id) : false;
-    const isCsmReserved = num >= 11 && num <= 15; // CSM fisso dal PDF
+    const isCsmReserved = num >= 11 && num <= 15;
     const isReserved = isDbReserved || isCsmReserved;
 
     return (
