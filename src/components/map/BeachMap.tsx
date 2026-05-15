@@ -20,7 +20,7 @@ type BeachMapProps = {
 
 type SpotData = {
   id: string;
-  internal_code: string;
+  internal_code: string | number;
   zone_id: string;
 };
 
@@ -32,52 +32,55 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Carica la mappatura degli spots e le prenotazioni esistenti
   useEffect(() => {
     const loadBeachData = async () => {
       setIsLoading(true);
-      
-      // Scarica tutti gli ombrelloni censiti nella tabella 'spots'
-      const { data: spotsData } = await supabase
-        .from('spots')
-        .select('id, internal_code, zone_id')
-        .eq('is_active', true);
+      try {
+        // 1. Scarica tutti gli ombrelloni attivi
+        const { data: spotsData } = await supabase
+          .from('spots')
+          .select('id, internal_code, zone_id')
+          .eq('is_active', true);
 
-      if (spotsData) {
-        setDbSpots(spotsData);
+        if (spotsData) {
+          setDbSpots(spotsData);
+        }
+
+        // 2. Scarica le prenotazioni del giorno
+        const { data: bookingsData } = await supabase
+          .from('bookings')
+          .select('spot_id')
+          .eq('booking_date', selectedDate)
+          .not('status', 'eq', 'cancelled');
+
+        if (bookingsData) {
+          setReservedSpotIds(bookingsData.map(b => b.spot_id));
+        }
+      } catch (err) {
+        console.error("Errore nel caricamento dati:", err);
+      } finally {
+        setIsLoading(false);
       }
-
-      // Scarica le prenotazioni per la data selezionata
-      const { data: bookingsData } = await supabase
-        .from('bookings')
-        .select('spot_id')
-        .eq('booking_date', selectedDate)
-        .not('status', 'eq', 'cancelled'); // Esclude eventuali cancellati
-
-      if (bookingsData) {
-        setReservedSpotIds(bookingsData.map(b => b.spot_id));
-      }
-      
-      setIsLoading(false);
     };
 
     loadBeachData();
   }, [selectedDate]);
 
-  // 2. Funzione per gestire la conferma della prenotazione
   const handleConfirmBooking = async () => {
     if (selectedSpotNumber === null) return;
     
-    // Trova l'UUID dello spot corrispondente al numero cliccato
-    const targetSpot = dbSpots.find(s => s.internal_code === String(selectedSpotNumber));
+    // CONVERSIONE DI SICUREZZA: Confrontiamo trasformando entrambi in stringa pulita
+    const targetSpot = dbSpots.find(
+      s => String(s.internal_code).trim() === String(selectedSpotNumber).trim()
+    );
+
     if (!targetSpot) {
-      alert("Errore: Ombrellone non configurato nel database.");
+      alert(`Errore: L'ombrellone N° ${selectedSpotNumber} non è stato trovato nella tabella 'spots' del database. Verifica il contenuto della tabella.`);
       return;
     }
 
     setIsSubmitting(true);
 
-    // Esegue l'inserimento rispettando i campi della tabella 'bookings'
     const { error } = await supabase
       .from('bookings')
       .insert([
@@ -86,9 +89,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
           booking_date: selectedDate,
           num_guests: userData.numUtenti,
           booking_category: userData.categoria,
-          status: 'confirmed', // o lo stato predefinito del tuo enum 'booking_status'
-          // Nota: i campi nome/email andranno salvati nel profilo utente (tabella profiles) 
-          // o tramite metadati a seconda delle tue preferenze di autenticazione.
+          status: 'confirmed'
         }
       ]);
 
@@ -106,7 +107,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     }
   };
 
-  // Righe strutturate in base alla planimetria del PDF dell'Isola del Pescatore
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
@@ -115,19 +115,20 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     { startL: 81, endL: 90, startR: 91, endR: 100, center: "a" },
     { startL: 101, endL: 110, startR: 111, endR: 120, center: "s" },
     { startL: 121, endL: 129, startR: 130, endR: 139, center: "s" },
-    { startL: 140, endL: 146, startR: 147, endR: 154, center: "e" }, // Zona Tavecchia
+    { startL: 140, endL: 146, startR: 147, endR: 154, center: "e" },
     { startL: 155, endL: 160, startR: 161, endR: 167, center: "r" },
     { startL: null, endL: null, startR: 168, endR: 171, center: "a" },
     { startL: null, endL: null, startR: 172, endR: 174, center: "" },
   ];
 
   const renderSpot = (num: number) => {
-    // Cerca lo spot corrispondente nel database
-    const currentSpot = dbSpots.find(s => s.internal_code === String(num));
+    // CONVERSIONE DI SICUREZZA anche qui per il rendering delle icone
+    const currentSpot = dbSpots.find(
+      s => String(s.internal_code).trim() === String(num).trim()
+    );
     
-    // Verifica lo stato di occupazione (da DB o blocco fisso CSM 11-15 dal PDF)
     const isDbReserved = currentSpot ? reservedSpotIds.includes(currentSpot.id) : false;
-    const isCsmReserved = num >= 11 && num <= 15;
+    const isCsmReserved = num >= 11 && num <= 15; // CSM fisso dal PDF
     const isReserved = isDbReserved || isCsmReserved;
 
     return (
@@ -137,7 +138,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         className={`relative w-12 h-14 flex flex-col items-center justify-center transition-all duration-150 select-none
           ${isReserved ? 'text-gray-400 cursor-not-allowed' : 'text-blue-500 hover:scale-110 cursor-pointer'}`}
       >
-        {/* Disegno vettoriale dell'ombrellone */}
         <svg 
           viewBox="0 0 24 24" 
           className={`w-10 h-10 drop-shadow-sm transition-colors ${isReserved ? 'fill-gray-400' : 'fill-blue-500 hover:fill-blue-600'}`}
@@ -147,15 +147,13 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
           <path d="M11.5 12h1v9h-1z" fill="#94a3b8" />
         </svg>
 
-        {/* Etichetta con il numero */}
         <span className={`text-[10px] font-black mt-0.5 px-1 rounded bg-white/80 shadow-sm border
           ${isReserved ? 'text-gray-500 border-gray-200' : 'text-blue-900 border-blue-100'}`}>
           {num}
         </span>
 
-        {/* Sbarramento visivo X */}
         {isReserved && (
-          <div className="absolute top-2 w-7 h-7 flex items-center justify-center bg-red-600/90 text-white font-extrabold text-[10px] rounded-full shadow-mdP">
+          <div className="absolute top-2 w-7 h-7 flex items-center justify-center bg-red-600/90 text-white font-extrabold text-[10px] rounded-full shadow-md">
             ✕
           </div>
         )}
@@ -174,13 +172,10 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   return (
     <div className="flex flex-col items-center bg-orange-50/60 p-6 rounded-3xl shadow-xl border border-orange-100 max-w-4xl mx-auto overflow-x-auto relative">
-      
-      {/* Visualizzazione Mare */}
       <div className="w-full text-center py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-2xl font-black text-white tracking-[1.5em] uppercase text-sm shadow-md mb-8">
         ~~~ MARE ~~~
       </div>
 
-      {/* Griglia della Spiaggia */}
       <div className="flex flex-col gap-2 min-w-[720px]">
         {rows.map((row, rowIndex) => (
           <div key={rowIndex} className="flex items-center justify-center gap-6">
@@ -197,7 +192,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         ))}
       </div>
 
-      {/* Modale Pop-up di Conferma */}
       {selectedSpotNumber !== null && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center">
