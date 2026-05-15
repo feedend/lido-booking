@@ -84,9 +84,9 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     }
   };
 
-  // CONFIGURAZIONE RIGHE AGGIORNATA: La prima fila a sinistra parte da 4 invece che da 1
+  // CONFIGURAZIONE RIGHE CORRETTA: La prima fila a sinistra va regolarmente da 1 a 10
   const rows = [
-    { startL: 4, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
+    { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
     { startL: 41, endL: 50, startR: 51, endR: 60, center: "" },
     { startL: 61, endL: 70, startR: 71, endR: 80, center: "P" },
@@ -159,19 +159,14 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       {/* CONTENITORE CON SCORRIMENTO ORIZZONTALE */}
       <div className="w-full overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-orange-200 scrollbar-track-transparent rounded-xl">
         
-        {/* Griglia della Spiaggia con allineamento e spaziature fisse per mantenere la simmetria */}
+        {/* Griglia della Spiaggia */}
         <div className="flex flex-col gap-2 min-w-[760px] mx-auto px-2">
           {rows.map((row, rowIndex) => (
             <div key={rowIndex} className="flex items-center justify-center gap-4">
               
-              {/* Settore Sinistro: Gestisce anche lo spazio vuoto se mancano degli ombrelloni (come l'1, 2, 3) */}
+              {/* Settore Sinistro standard e pulito */}
               <div className="flex gap-1 w-[340px] justify-end items-center">
                 {row.startL && Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderSpot)}
-                
-                {/* Se è la prima riga e parte da 4, aggiungiamo un blocco invisibile della dimensione esatta di 3 ombrelloni per non far disallineare la griglia rispetto al bagnino */}
-                {rowIndex === 0 && row.startL === 4 && (
-                  <div className="w-[144px] h-14 shrink-0 pointer-events-none" aria-hidden="true" />
-                )}
               </div>
               
               {/* Passerella / Servizi Centrali */}
@@ -209,7 +204,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                 <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-6">
                   <p className="border-b border-slate-200/60 pb-1"><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
                   <p className="border-b border-slate-200/60 pb-1"><strong>Email:</strong> {userData.email}</p>
-                  <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} persone</p>
+                  <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} people</p>
                   <p><strong>Tariffa applicata:</strong> {userData.categoria}</p>
                 </div>
 
