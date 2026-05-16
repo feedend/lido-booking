@@ -22,6 +22,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   const [reservedSpots, setReservedSpots] = useState<number[]>([]);
   const [selectedSpotNumber, setSelectedSpotNumber] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentProcessing, setPaymentProcessing] = useState(false); // Stato per il pagamento fittizio
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -55,47 +56,45 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   const calcolaPrezzoTotale = () => {
     const quotaBaseOmbrellone = 2.0;
     let supplementoPersona = 0.0;
-
-    // Normalizziamo la stringa della categoria per evitare problemi di maiuscole/minuscole o spazi
     const cat = userData.categoria.trim().toLowerCase();
 
-    if (cat.includes('altra forza armata')) {
-      supplementoPersona = 3.5;
-    } else if (cat === 'esercito' || cat.includes('esercito parenti')) {
+    if (cat.includes('esercito parenti')) {
+      supplementoPersona = 1.5;
+    } else if (cat === 'esercito' || cat.includes('altra forza armata')) {
       supplementoPersona = 1.5;
     } else if (cat.includes('quiescenza')) {
       supplementoPersona = 3.5;
-    } else {
-      // Tariffa di fallback se la categoria non rientra tra quelle specificate
-      supplementoPersona = 0.0; 
     }
 
-    const totalePersone = userData.numUtenti * supplementoPersona;
-    return quotaBaseOmbrellone + totalePersone;
+    return quotaBaseOmbrellone + (userData.numUtenti * supplementoPersona);
   };
 
   const prezzoFinale = calcolaPrezzoTotale();
 
-  const handleConfirmBooking = async () => {
+  // FUNZIONE PRINCIPALE: GESTIONE PAGAMENTO FITTIZIO + SALVATAGGIO
+  const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
+    
+    // FASE 1: Avvio simulazione pagamento
+    setPaymentProcessing(true);
     setIsSubmitting(true);
 
     try {
+      // Controlliamo prima se l'ombrellone o la categoria sono già occupati per evitare brutte sorprese alla fine del pagamento
       const { data: existingBookings, error: fetchError } = await supabase
-        .from('bookings')
-        .insert ? // Qui manteniamo la logica precedente per scaricare ed evitare i duplicati
-        await supabase
         .from('bookings')
         .select('booking_category')
         .eq('booking_date', selectedDate)
-        .not('status', 'eq', 'cancelled') : { data: [], error: null };
+        .not('status', 'eq', 'cancelled');
 
       if (fetchError) {
-        alert("Errore durante il controllo dei dati: " + fetchError.message);
+        alert("Errore di controllo: " + fetchError.message);
+        setPaymentProcessing(false);
         setIsSubmitting(false);
         return;
       }
 
+      // Controllo anti-duplicato categoria/email
       const haGiaPrenotatoCategoria = existingBookings?.some(b => {
         const parti = b.booking_category.split('|');
         if (parti.length >= 3) {
@@ -107,41 +106,50 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       });
 
       if (haGiaPrenotatoCategoria) {
-        alert(`Attenzione! Questa email (${userData.email}) ha già effettuato una prenotazione per la categoria "${userData.categoria}" in questa data.`);
+        alert(`Attenzione! L'email ${userData.email} ha già una prenotazione attiva per la categoria "${userData.categoria}" in questa data.`);
+        setPaymentProcessing(false);
         setIsSubmitting(false);
         setSelectedSpotNumber(null);
         return;
       }
 
-      // Salviamo le informazioni aggiungendo anche il prezzo calcolato nel record per lo storico admin
+      // Simuliamo l'attesa del circuito bancario (3 secondi di delay)
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      
+      // FASE 2: Pagamento "approvato", procediamo alla scrittura su Supabase
+      setPaymentProcessing(false); // Fine animazione pagamento bancario
+
       const { error } = await supabase
         .from('bookings')
         .insert([
           {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
-            // Aggiungiamo anche il prezzo finale nella stringa se necessario, oppure l'importo passerà in un campo dedicato se lo aggiungi a DB
             booking_category: `${selectedSpotNumber} | ${userData.categoria} | ${userData.email.trim()} | Prezzo: ${prezzoFinale.toFixed(2)}€`,
             status: 'confirmed'
           }
         ]);
 
       if (error) {
-        alert("Errore durante il salvataggio: " + error.message);
+        alert("Errore durante la registrazione della prenotazione: " + error.message);
       } else {
+        // Mostriamo la schermata di successo con il QR Code
         setBookingSuccess(true);
         setReservedSpots([...reservedSpots, selectedSpotNumber]);
-        setTimeout(() => {
-          setBookingSuccess(false);
-          setSelectedSpotNumber(null);
-        }, 2500);
+        // Non resettiamo subito il modale per permettere all'utente di vedere/salvare il QR Code
       }
     } catch (err) {
-      alert("Errore di rete o configurazione.");
+      alert("Errore durante il processo di transazione.");
+      setPaymentProcessing(false);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // URL generato dinamicamente per il QR Code (Contiene Info Chiave)
+  const qrCodeUrl = selectedSpotNumber 
+    ? `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=LIDO_SANTA_SEVERA|DATA:${selectedDate}|POSTO:${selectedSpotNumber}|EMAIL:${userData.email}`
+    : '';
 
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
@@ -255,34 +263,60 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         </div>
       </div>
 
-      {/* Modale Pop-up con Dettaglio Prezzi ed Economico */}
+      {/* Modale Pop-up con Flusso di Pagamento Fittizio e QR Code Finale */}
       {selectedSpotNumber !== null && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center border border-slate-100 scale-in duration-200">
+            
             {bookingSuccess ? (
-              <div className="py-6">
-                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 animate-bounce">✓</div>
-                <h3 className="text-xl font-bold text-slate-800">Prenotato!</h3>
-                <p className="text-sm text-slate-500 mt-1">Ombrellone n° {selectedSpotNumber} bloccato con successo.</p>
+              /* SCHERMATA FINALE: SUCCESSO CON QR CODE */
+              <div className="py-2 flex flex-col items-center">
+                <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-2xl mb-3">✓</div>
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Prenotazione Confermata</h3>
+                <p className="text-xs text-slate-500 mt-1 mb-4">Mostra questo pass all'ingresso dello stabilimento</p>
+                
+                {/* QR CODE GENERATO CON DATA E NUMERO */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner mb-3">
+                  <img 
+                    src={qrCodeUrl} 
+                    alt="QR Code Prenotazione" 
+                    className="w-44 h-44 mix-blend-multiply"
+                  />
+                  {/* DETTAGLI COSTRUTTIVI RICHIESTI SOTTO L'IMMAGINE */}
+                  <div className="mt-3 pt-2.5 border-t border-slate-200 font-mono text-xs text-slate-800 space-y-1 bg-white p-2 rounded-xl border">
+                    <p><strong>DATA:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
+                    <p className="text-orange-600 font-bold"><strong>OMBRELLONE N°:</strong> {selectedSpotNumber}</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setBookingSuccess(false);
+                    setSelectedSpotNumber(null);
+                  }}
+                  className="mt-2 w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all text-xs uppercase tracking-wider"
+                >
+                  Chiudi e Torna alla Mappa
+                </button>
               </div>
             ) : (
+              /* SCHERMATA INIZIALE: RIEPILOGO E CIRCUITO DI PAGAMENTO */
               <>
-                <h3 className="text-lg font-black text-orange-950 uppercase tracking-tight mb-2">Conferma Selezione</h3>
-                <p className="text-sm text-slate-600 mb-6">
-                  Vuoi riservare l'ombrellone <span className="font-extrabold text-orange-600 text-lg">N° {selectedSpotNumber}</span> per il giorno <span className="font-semibold text-slate-800">{new Date(selectedDate).toLocaleDateString('it-IT')}</span>?
+                <h3 className="text-lg font-black text-orange-950 uppercase tracking-tight mb-2">Riepilogo e Pagamento</h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  Stai per riservare l'ombrellone <span className="font-extrabold text-orange-600">N° {selectedSpotNumber}</span>.
                 </p>
                 
                 <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-4">
+                  <p className="border-b border-slate-200/60 pb-1"><strong>Data:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
                   <p className="border-b border-slate-200/60 pb-1"><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
-                  <p className="border-b border-slate-200/60 pb-1"><strong>Email:</strong> {userData.email}</p>
                   <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} persone</p>
-                  <p><strong>Tariffa applicata:</strong> {userData.categoria}</p>
+                  <p><strong>Tariffa:</strong> {userData.categoria}</p>
                 </div>
 
-                {/* RIQUADRO PREZZO AGGIORNATO */}
-                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-6 flex justify-between items-center text-sm shadow-inner">
+                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3.5 mb-6 flex justify-between items-center text-sm shadow-inner">
                   <span className="font-bold text-orange-950 uppercase text-xs tracking-wider">Totale da pagare:</span>
-                  <span className="font-black text-xl text-orange-600">{prezzoFinale.toFixed(2)} €</span>
+                  <span className="font-black text-lg text-orange-600">{prezzoFinale.toFixed(2)} €</span>
                 </div>
 
                 <div className="flex gap-3">
@@ -295,10 +329,17 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                   </button>
                   <button
                     disabled={isSubmitting}
-                    onClick={handleConfirmBooking}
-                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center"
+                    onClick={handlePaymentAndBooking}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center min-w-[140px]"
                   >
-                    {isSubmitting ? "Salvataggio..." : "Conferma"}
+                    {paymentProcessing ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span className="text-xs">Circuito Nexi...</span>
+                      </div>
+                    ) : (
+                      "Paga e Conferma"
+                    )}
                   </button>
                 </div>
               </>
