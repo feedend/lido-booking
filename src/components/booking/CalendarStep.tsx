@@ -49,7 +49,7 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
       />
 
       <div className="text-[10px] text-slate-400 uppercase tracking-tighter">
-        Sistema di prenotazione anticipata - Isola del Pescatore
+        Sistema di prenotazione anticipata - Stabilimento Balneare Santa Severa
       </div>
     </div>
   );
