@@ -51,17 +51,44 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     loadBookings();
   }, [selectedDate]);
 
+  // FUNZIONE PER IL CALCOLO DINAMICO DEL PREZZO
+  const calcolaPrezzoTotale = () => {
+    const quotaBaseOmbrellone = 2.0;
+    let supplementoPersona = 0.0;
+
+    // Normalizziamo la stringa della categoria per evitare problemi di maiuscole/minuscole o spazi
+    const cat = userData.categoria.trim().toLowerCase();
+
+    if (cat.includes('altra forza armata')) {
+      supplementoPersona = 3.5;
+    } else if (cat === 'esercito' || cat.includes('esercito parenti')) {
+      supplementoPersona = 1.5;
+    } else if (cat.includes('quiescenza')) {
+      supplementoPersona = 3.5;
+    } else {
+      // Tariffa di fallback se la categoria non rientra tra quelle specificate
+      supplementoPersona = 0.0; 
+    }
+
+    const totalePersone = userData.numUtenti * supplementoPersona;
+    return quotaBaseOmbrellone + totalePersone;
+  };
+
+  const prezzoFinale = calcolaPrezzoTotale();
+
   const handleConfirmBooking = async () => {
     if (selectedSpotNumber === null) return;
     setIsSubmitting(true);
 
     try {
-      // 1. SCARICA LE PRENOTAZIONI ESISTENTI PER VERIFICA DUPLICATI
       const { data: existingBookings, error: fetchError } = await supabase
+        .from('bookings')
+        .insert ? // Qui manteniamo la logica precedente per scaricare ed evitare i duplicati
+        await supabase
         .from('bookings')
         .select('booking_category')
         .eq('booking_date', selectedDate)
-        .not('status', 'eq', 'cancelled');
+        .not('status', 'eq', 'cancelled') : { data: [], error: null };
 
       if (fetchError) {
         alert("Errore durante il controllo dei dati: " + fetchError.message);
@@ -69,35 +96,32 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      // 2. CONTROLLO DELL'EMAIL E DELLA CATEGORIA
-      // Verifichiamo se l'email inserita ha già prenotato la stessa categoria in questa data
       const haGiaPrenotatoCategoria = existingBookings?.some(b => {
         const parti = b.booking_category.split('|');
         if (parti.length >= 3) {
           const catMappa = parti[1].trim();
           const emailMappa = parti[2].trim().toLowerCase();
-          
           return catMappa === userData.categoria && emailMappa === userData.email.toLowerCase();
         }
         return false;
       });
 
       if (haGiaPrenotatoCategoria) {
-        alert(`Attenzione! Questa email (${userData.email}) ha già effettuato una prenotazione per la categoria "${userData.categoria}" in data ${new Date(selectedDate).toLocaleDateString('it-IT')}. Non è possibile duplicare le prenotazioni per la stessa categoria nello stesso giorno.`);
+        alert(`Attenzione! Questa email (${userData.email}) ha già effettuato una prenotazione per la categoria "${userData.categoria}" in questa data.`);
         setIsSubmitting(false);
         setSelectedSpotNumber(null);
         return;
       }
 
-      // 3. INSERIMENTO DELLA PRENOTAZIONE (Salva anche l'email nella stringa)
+      // Salviamo le informazioni aggiungendo anche il prezzo calcolato nel record per lo storico admin
       const { error } = await supabase
         .from('bookings')
         .insert([
           {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
-            // Formato blindato: "NUMERO | CATEGORIA | EMAIL"
-            booking_category: `${selectedSpotNumber} | ${userData.categoria} | ${userData.email.trim()}`,
+            // Aggiungiamo anche il prezzo finale nella stringa se necessario, oppure l'importo passerà in un campo dedicato se lo aggiungi a DB
+            booking_category: `${selectedSpotNumber} | ${userData.categoria} | ${userData.email.trim()} | Prezzo: ${prezzoFinale.toFixed(2)}€`,
             status: 'confirmed'
           }
         ]);
@@ -197,7 +221,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         <div className="flex flex-col gap-3 w-[960px] mx-auto pl-2 pr-4">
           {rows.map((row, rowIndex) => (
             <div key={rowIndex} className="flex items-center justify-start gap-4">
-              
               <div className="w-[430px] grid grid-cols-10 gap-0.5 justify-items-start">
                 {row.startL ? (
                   <>
@@ -227,13 +250,12 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                   Array.from({ length: 10 }).map((_, i) => <div key={`blank-r-${i}`} className="w-10 h-14" />)
                 )}
               </div>
-
             </div>
           ))}
         </div>
       </div>
 
-      {/* Modale Pop-up */}
+      {/* Modale Pop-up con Dettaglio Prezzi ed Economico */}
       {selectedSpotNumber !== null && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center border border-slate-100 scale-in duration-200">
@@ -250,11 +272,17 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                   Vuoi riservare l'ombrellone <span className="font-extrabold text-orange-600 text-lg">N° {selectedSpotNumber}</span> per il giorno <span className="font-semibold text-slate-800">{new Date(selectedDate).toLocaleDateString('it-IT')}</span>?
                 </p>
                 
-                <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-6">
+                <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-4">
                   <p className="border-b border-slate-200/60 pb-1"><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
                   <p className="border-b border-slate-200/60 pb-1"><strong>Email:</strong> {userData.email}</p>
                   <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} persone</p>
                   <p><strong>Tariffa applicata:</strong> {userData.categoria}</p>
+                </div>
+
+                {/* RIQUADRO PREZZO AGGIORNATO */}
+                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-6 flex justify-between items-center text-sm shadow-inner">
+                  <span className="font-bold text-orange-950 uppercase text-xs tracking-wider">Totale da pagare:</span>
+                  <span className="font-black text-xl text-orange-600">{prezzoFinale.toFixed(2)} €</span>
                 </div>
 
                 <div className="flex gap-3">
