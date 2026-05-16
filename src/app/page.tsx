@@ -38,7 +38,7 @@ export default function Home() {
           Stabilimento Balneare Santa Severa
         </h1>
         <p className="text-sm text-slate-500 font-medium mt-1">
-          Stabilimento Balneare • Sistema di Prenotazione
+          • Sistema di Prenotazione •
         </p>
       </div>
 
@@ -116,7 +116,7 @@ export default function Home() {
 
       {/* Footer tecnico */}
       <div className="text-center mt-12 text-[10px] text-slate-400 uppercase tracking-widest font-medium">
-        PWA Gestione Lido © {new Date().getFullYear()}
+        DaMa • Gestione Lido © {new Date().getFullYear()}
       </div>
     </main>
   );
