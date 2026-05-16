@@ -35,7 +35,7 @@ export default function Home() {
       {/* Intestazione dell'applicazione */}
       <div className="max-w-4xl mx-auto text-center mb-8">
         <h1 className="text-3xl font-black text-blue-900 tracking-tight uppercase">
-          Isola del Pescatore
+          Stabilimento Balneare Santa Severa
         </h1>
         <p className="text-sm text-slate-500 font-medium mt-1">
           Stabilimento Balneare • Sistema di Prenotazione
