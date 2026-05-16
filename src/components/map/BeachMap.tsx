@@ -107,12 +107,13 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       <div
         key={num}
         onClick={() => !isReserved && setSelectedSpotNumber(num)}
-        className={`relative w-11 h-14 flex flex-col items-center justify-center transition-all duration-150 select-none mx-auto
-          ${isReserved ? 'text-gray-400 cursor-not-allowed' : 'text-blue-500 hover:scale-110 cursor-pointer'}`}
+        className={`relative w-11 h-14 flex flex-col items-center justify-center transition-all duration-150 select-none shrink-0
+          ${isReserved ? 'text-gray-400 cursor-not-allowed' : 'text-orange-600 hover:scale-110 cursor-pointer'}`}
       >
+        {/* OMBRELLONI ARANCIONI */}
         <svg 
           viewBox="0 0 24 24" 
-          className={`w-9 h-9 drop-shadow-sm transition-colors ${isReserved ? 'fill-gray-300' : 'fill-blue-500 hover:fill-blue-600'}`}
+          className={`w-9 h-9 drop-shadow-sm transition-colors ${isReserved ? 'fill-gray-300' : 'fill-orange-500 hover:fill-orange-600'}`}
         >
           <path d="M12 2C6.48 2 2 6.48 2 12h20c0-5.52-4.48-10-10-10z" />
           <path d="M12 2v10M7 4.5L12 12M17 4.5L12 12" stroke="white" strokeWidth="0.5" strokeLinecap="round" />
@@ -120,7 +121,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         </svg>
 
         <span className={`text-[9px] font-black mt-0.5 px-1 rounded bg-white/90 shadow-sm border
-          ${isReserved ? 'text-gray-400 border-gray-200' : 'text-blue-900 border-blue-100'}`}>
+          ${isReserved ? 'text-gray-400 border-gray-200' : 'text-orange-950 border-orange-100'}`}>
           {num}
         </span>
 
@@ -136,50 +137,121 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl shadow-md max-w-sm mx-auto">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500 mb-4"></div>
         <p className="text-sm font-semibold text-slate-600">Sincronizzazione spiaggia...</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto bg-orange-50/60 p-4 sm:p-6 rounded-3xl shadow-xl border border-orange-100 relative">
+    <div className="w-full max-w-5xl mx-auto bg-amber-50/40 p-4 sm:p-6 rounded-3xl shadow-xl border border-orange-100/70 relative">
       
-      <div className="block md:hidden text-center text-[10px] text-orange-700/60 font-bold uppercase tracking-wider mb-2 animate-pulse">
+      <div className="block md:hidden text-center text-[10px] text-orange-800/70 font-bold uppercase tracking-wider mb-2 animate-pulse">
         ↔ Scorri lateralmente per vedere tutta la spiaggia ↔
       </div>
 
-      <div className="w-full text-center py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-2xl font-black text-white tracking-[0.8em] sm:tracking-[1.5em] uppercase text-xs sm:text-sm shadow-md mb-6 sticky left-0">
-        ~~~ MARE ~~~
+      {/* TITOLO AGGIORNATO CON IL NOME DELLO STABILIMENTO */}
+      <div className="w-full text-center py-3.5 bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-600 rounded-2xl shadow-md mb-6 sticky left-0">
+        <h2 className="font-black text-white uppercase tracking-wider text-xs sm:text-sm">
+          Stabilimento Balneare Santa Severa
+        </h2>
+        <p className="text-[10px] text-cyan-50 font-medium tracking-[0.3em] uppercase mt-0.5">
+          ~~~ Mappa della Spiaggia ~~~
+        </p>
       </div>
 
-      {/* CONTENITORE PRINCIPALE CON SCORRIMENTO */}
-      <div className="w-full overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-orange-200 scrollbar-track-transparent rounded-xl">
+      {/* CONTENITORE CON SCORRIMENTO ORIZZONTALE FLUIDO E SICURO */}
+      <div className="w-full overflow-x-auto pb-4 rounded-xl">
         
-        {/* LA SPIAGGIA: Aumentata la larghezza minima totale a 1000px per dare ampio respiro visivo */}
-        <div className="flex flex-col gap-3 min-w-[1000px] mx-auto px-4">
+        {/* LA GRIGLIA: w-[960px] fissa evita l'overflow negativo e assicura che lo scorrimento parta SEMPRE dal pixel 0 (lato sinistro con l'ombrellone 1) */}
+        <div className="flex flex-col gap-3 w-[960px] mx-auto pl-2 pr-4">
           {rows.map((row, rowIndex) => (
-            <div key={rowIndex} className="flex items-center justify-center gap-6">
+            <div key={rowIndex} className="flex items-center justify-start gap-4">
               
-              {/* SETTORE SINISTRO BILANCIATO: Griglia fissa a 10 colonne da 44px ciascuna (Totale 440px fisse) */}
-              <div className="w-[440px] grid grid-cols-10 gap-0.5 justify-items-end">
+              {/* SETTORE SINISTRO CORRETTO (Allineamento a sinistra forzato per non rompere lo scroll) */}
+              <div className="w-[430px] grid grid-cols-10 gap-0.5 justify-items-start">
                 {row.startL ? (
                   <>
-                    {/* Genera gli spazi vuoti iniziali se la riga non ha il numero massimo di elementi per tenerli allineati a destra sulla passerella */}
+                    {/* Genera spazi vuoti iniziali invertiti se la riga è corta, spingendo gli elementi verso la passerella senza causare overflow */}
                     {Array.from({ length: 10 - (row.endL! - row.startL! + 1) }).map((_, i) => (
-                      <div key={`empty-l-${i}`} className="w-11 h-14 opacity-0 pointer-events-none" />
+                      <div key={`empty-l-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />
                     ))}
                     {Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderSpot)}
                   </>
                 ) : (
-                  // Se la riga non ha un blocco sinistro (ultime file), riempiamo con 10 spazi vuoti trasparenti
-                  Array.from({ length: 10 }).map((_, i) => <div key={`blank-l-${i}`} className="w-11 h-14" />)
+                  Array.from({ length: 10 }).map((_, i) => <div key={`blank-l-${i}`} className="w-10 h-14" />)
                 )}
               </div>
               
               {/* PASSERELLA CENTRALE */}
-              <div className="w-12 shrink-0 flex justify-center items-center font-black text-amber-700 uppercase text-[10px] tracking-wider bg-yellow-100/90 py-2 rounded-xl border border-yellow-200/60 shadow-inner">
+              <div className="w-12 shrink-0 flex justify-center items-center font-black text-amber-800 uppercase text-[9px] tracking-wider bg-yellow-100/90 py-2 rounded-xl border border-yellow-200/50 shadow-inner">
                 {row.center || "•"}
               </div>
               
-              {/* SET
+              {/* SETTORE DESTRO CORRETTO */}
+              <div className="w-[430px] grid grid-cols-10 gap-0.5 justify-items-start">
+                {row.startR ? (
+                  <>
+                    {Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderSpot)}
+                    {Array.from({ length: 10 - (row.endR! - row.startR! + 1) }).map((_, i) => (
+                      <div key={`empty-r-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />
+                    ))}
+                  </>
+                ) : (
+                  Array.from({ length: 10 }).map((_, i) => <div key={`blank-r-${i}`} className="w-10 h-14" />)
+                )}
+              </div>
+
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Modale Pop-up */}
+      {selectedSpotNumber !== null && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center border border-slate-100 scale-in duration-200">
+            {bookingSuccess ? (
+              <div className="py-6">
+                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 animate-bounce">✓</div>
+                <h3 className="text-xl font-bold text-slate-800">Prenotato!</h3>
+                <p className="text-sm text-slate-500 mt-1">Ombrellone n° {selectedSpotNumber} bloccato con successo.</p>
+              </div>
+            ) : (
+              <>
+                <h3 className="text-lg font-black text-orange-950 uppercase tracking-tight mb-2">Conferma Selezione</h3>
+                <p className="text-sm text-slate-600 mb-6">
+                  Vuoi riservare l'ombrellone <span className="font-extrabold text-orange-600 text-lg">N° {selectedSpotNumber}</span> per il giorno <span className="font-semibold text-slate-800">{new Date(selectedDate).toLocaleDateString('it-IT')}</span>?
+                </p>
+                
+                <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-6">
+                  <p className="border-b border-slate-200/60 pb-1"><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
+                  <p className="border-b border-slate-200/60 pb-1"><strong>Email:</strong> {userData.email}</p>
+                  <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} persone</p>
+                  <p><strong>Tariffa applicata:</strong> {userData.categoria}</p>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    disabled={isSubmitting}
+                    onClick={() => setSelectedSpotNumber(null)}
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-all text-sm"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    disabled={isSubmitting}
+                    onClick={handleConfirmBooking}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center"
+                  >
+                    {isSubmitting ? "Salvataggio..." : "Conferma"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
