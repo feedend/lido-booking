@@ -153,7 +153,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       {/* TITOLO AGGIORNATO CON IL NOME DELLO STABILIMENTO */}
       <div className="w-full text-center py-3.5 bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-600 rounded-2xl shadow-md mb-6 sticky left-0">
         <h2 className="font-black text-white uppercase tracking-wider text-xs sm:text-sm">
-          Stabilimento Balneare Santa Severa
+          MARE
         </h2>
         <p className="text-[10px] text-cyan-50 font-medium tracking-[0.3em] uppercase mt-0.5">
           ~~~ Mappa della Spiaggia ~~~
