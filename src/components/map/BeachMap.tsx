@@ -56,13 +56,48 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     setIsSubmitting(true);
 
     try {
+      // 1. SCARICA LE PRENOTAZIONI ESISTENTI PER VERIFICA DUPLICATI
+      const { data: existingBookings, error: fetchError } = await supabase
+        .from('bookings')
+        .select('booking_category')
+        .eq('booking_date', selectedDate)
+        .not('status', 'eq', 'cancelled');
+
+      if (fetchError) {
+        alert("Errore durante il controllo dei dati: " + fetchError.message);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 2. CONTROLLO DELL'EMAIL E DELLA CATEGORIA
+      // Verifichiamo se l'email inserita ha già prenotato la stessa categoria in questa data
+      const haGiaPrenotatoCategoria = existingBookings?.some(b => {
+        const parti = b.booking_category.split('|');
+        if (parti.length >= 3) {
+          const catMappa = parti[1].trim();
+          const emailMappa = parti[2].trim().toLowerCase();
+          
+          return catMappa === userData.categoria && emailMappa === userData.email.toLowerCase();
+        }
+        return false;
+      });
+
+      if (haGiaPrenotatoCategoria) {
+        alert(`Attenzione! Questa email (${userData.email}) ha già effettuato una prenotazione per la categoria "${userData.categoria}" in data ${new Date(selectedDate).toLocaleDateString('it-IT')}. Non è possibile duplicare le prenotazioni per la stessa categoria nello stesso giorno.`);
+        setIsSubmitting(false);
+        setSelectedSpotNumber(null);
+        return;
+      }
+
+      // 3. INSERIMENTO DELLA PRENOTAZIONE (Salva anche l'email nella stringa)
       const { error } = await supabase
         .from('bookings')
         .insert([
           {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
-            booking_category: `${selectedSpotNumber} | ${userData.categoria}`,
+            // Formato blindato: "NUMERO | CATEGORIA | EMAIL"
+            booking_category: `${selectedSpotNumber} | ${userData.categoria} | ${userData.email.trim()}`,
             status: 'confirmed'
           }
         ]);
@@ -86,16 +121,16 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
-    { startL: 21, endL: 30, startR: 31, endR: 40, center: "P" },
-    { startL: 41, endL: 50, startR: 51, endR: 60, center: "A" },
-    { startL: 61, endL: 70, startR: 71, endR: 80, center: "S" },
-    { startL: 81, endL: 90, startR: 91, endR: 100, center: "S" },
-    { startL: 101, endL: 110, startR: 111, endR: 120, center: "E" },
-    { startL: 121, endL: 129, startR: 130, endR: 139, center: "R" },
-    { startL: 140, endL: 146, startR: 147, endR: 154, center: "E" },
-    { startL: 155, endL: 160, startR: 161, endR: 167, center: "L" },
-    { startL: null, endL: null, startR: 168, endR: 171, center: "L" },
-    { startL: null, endL: null, startR: 172, endR: 174, center: "A" },
+    { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
+    { startL: 41, endL: 50, startR: 51, endR: 60, center: "" },
+    { startL: 61, endL: 70, startR: 71, endR: 80, center: "P" },
+    { startL: 81, endL: 90, startR: 91, endR: 100, center: "a" },
+    { startL: 101, endL: 110, startR: 111, endR: 120, center: "s" },
+    { startL: 121, endL: 129, startR: 130, endR: 139, center: "s" },
+    { startL: 140, endL: 146, startR: 147, endR: 154, center: "e" },
+    { startL: 155, endL: 160, startR: 161, endR: 167, center: "r" },
+    { startL: null, endL: null, startR: 168, endR: 171, center: "a" },
+    { startL: null, endL: null, startR: 172, endR: 174, center: "" },
   ];
 
   const renderSpot = (num: number) => {
@@ -110,7 +145,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         className={`relative w-11 h-14 flex flex-col items-center justify-center transition-all duration-150 select-none shrink-0
           ${isReserved ? 'text-gray-400 cursor-not-allowed' : 'text-orange-600 hover:scale-110 cursor-pointer'}`}
       >
-        {/* OMBRELLONI ARANCIONI */}
         <svg 
           viewBox="0 0 24 24" 
           className={`w-9 h-9 drop-shadow-sm transition-colors ${isReserved ? 'fill-gray-300' : 'fill-orange-500 hover:fill-orange-600'}`}
@@ -150,29 +184,23 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         ↔ Scorri lateralmente per vedere tutta la spiaggia ↔
       </div>
 
-      {/* TITOLO AGGIORNATO CON IL NOME DELLO STABILIMENTO */}
       <div className="w-full text-center py-3.5 bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-600 rounded-2xl shadow-md mb-6 sticky left-0">
         <h2 className="font-black text-white uppercase tracking-wider text-xs sm:text-sm">
-          MARE
+          Stabilimento Balneare Santa Severa
         </h2>
         <p className="text-[10px] text-cyan-50 font-medium tracking-[0.3em] uppercase mt-0.5">
           ~~~ Mappa della Spiaggia ~~~
         </p>
       </div>
 
-      {/* CONTENITORE CON SCORRIMENTO ORIZZONTALE FLUIDO E SICURO */}
       <div className="w-full overflow-x-auto pb-4 rounded-xl">
-        
-        {/* LA GRIGLIA: w-[960px] fissa evita l'overflow negativo e assicura che lo scorrimento parta SEMPRE dal pixel 0 (lato sinistro con l'ombrellone 1) */}
         <div className="flex flex-col gap-3 w-[960px] mx-auto pl-2 pr-4">
           {rows.map((row, rowIndex) => (
             <div key={rowIndex} className="flex items-center justify-start gap-4">
               
-              {/* SETTORE SINISTRO CORRETTO (Allineamento a sinistra forzato per non rompere lo scroll) */}
               <div className="w-[430px] grid grid-cols-10 gap-0.5 justify-items-start">
                 {row.startL ? (
                   <>
-                    {/* Genera spazi vuoti iniziali invertiti se la riga è corta, spingendo gli elementi verso la passerella senza causare overflow */}
                     {Array.from({ length: 10 - (row.endL! - row.startL! + 1) }).map((_, i) => (
                       <div key={`empty-l-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />
                     ))}
@@ -183,12 +211,10 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                 )}
               </div>
               
-              {/* PASSERELLA CENTRALE */}
               <div className="w-12 shrink-0 flex justify-center items-center font-black text-amber-800 uppercase text-[9px] tracking-wider bg-yellow-100/90 py-2 rounded-xl border border-yellow-200/50 shadow-inner">
                 {row.center || "•"}
               </div>
               
-              {/* SETTORE DESTRO CORRETTO */}
               <div className="w-[430px] grid grid-cols-10 gap-0.5 justify-items-start">
                 {row.startR ? (
                   <>
