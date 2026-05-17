@@ -1,7 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { Resend } from 'resend';
 
-// Inizializza Resend con la chiave presente nel file .env.local
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(request: Request) {
