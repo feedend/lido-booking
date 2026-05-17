@@ -119,6 +119,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       // FASE 2: Pagamento "approvato", procediamo alla scrittura su Supabase
       setPaymentProcessing(false); // Fine animazione pagamento bancario
 
+// ... (Tutto il codice precedente di Supabase rimane identico)
       const { error } = await supabase
         .from('bookings')
         .insert([
@@ -133,10 +134,32 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       if (error) {
         alert("Errore durante la registrazione della prenotazione: " + error.message);
       } else {
-        // Mostriamo la schermata di successo con il QR Code
+        // INIZIO LOGICA INVIO EMAIL AUTOMATICA
+        try {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: userData.email.trim(),
+              nome: userData.nome,
+              cognome: userData.cognome,
+              data: new Date(selectedDate).toLocaleDateString('it-IT'),
+              ombrellone: selectedSpotNumber,
+              prezzo: prezzoFinale.toFixed(2),
+              utenti: userData.numUtenti,
+              categoria: userData.categoria
+            }),
+          });
+        } catch (emailErr) {
+          console.error("Errore nell'invio dell'email di riepilogo:", emailErr);
+          // Non blocchiamo l'utente se l'email fallisce ma la prenotazione a DB è andata a buon fine
+        }
+        // FINE LOGICA INVIO EMAIL
+
         setBookingSuccess(true);
         setReservedSpots([...reservedSpots, selectedSpotNumber]);
-        // Non resettiamo subito il modale per permettere all'utente di vedere/salvare il QR Code
       }
     } catch (err) {
       alert("Errore durante il processo di transazione.");
