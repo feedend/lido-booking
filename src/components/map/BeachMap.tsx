@@ -146,10 +146,10 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     }
   };
 
-  // URL generato dinamicamente per il QR Code (Contiene Info Chiave)
-  const qrCodeUrl = selectedSpotNumber 
-    ? `https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=LIDO_SANTA_SEVERA|DATA:${selectedDate}|POSTO:${selectedSpotNumber}|EMAIL:${userData.email}`
-    : '';
+ // NUOVO METODO FUNZIONANTE E IMMEDIATO
+const qrCodeUrl = selectedSpotNumber 
+  ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${selectedDate}|POSTO:${selectedSpotNumber}|EMAIL:${userData.email}`)}`
+  : '';
 
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
