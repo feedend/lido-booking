@@ -1,58 +1,62 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 
-// Sostituisci con la tua API Key di Resend (da mettere poi nel file .env.local)
-const resend = new Resend(process.env.RESEND_API_KEY || 're_tuachiave_fittizia');
+// Inizializza Resend con la chiave presente nel file .env.local
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { email, nome, cognome, data, ombrellone, prezzo, utenti, categoria } = body;
 
-    // Generiamo lo stesso identico URL del QR code che vede a schermo
+    // Generiamo lo stesso identico QR code asincrono della mappa
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
       `LIDO_SANTA_SEVERA|DATA:${data}|POSTO:${ombrellone}|EMAIL:${email}`
     )}`;
 
-    // Invio dell'email tramite l'API di Resend
-    const dataEmail = await resend.emails.send({
-      from: 'Stabilimento Santa Severa <onboarding@resend.dev>', // In produzione userai info@tuodominio.it
+    // Struttura e invio del template email
+    const emailResponse = await resend.emails.send({
+      from: 'Stabilimento Santa Severa <onboarding@resend.dev>', // Mittente predefinito per i test in sandbox
       to: [email],
       subject: `Conferma Prenotazione Ombrellone N° ${ombrellone} - Santa Severa`,
       html: `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
-          <div style="background: linear-gradient(90deg, #06b6d4, #3b82f6); padding: 20px; text-align: center; border-radius: 12px; color: white;">
-            <h2 style="margin: 0; text-transform: uppercase; tracking-wider">Stabilimento Balneare Santa Severa</h2>
-            <p style="margin: 5px 0 0 0; opacity: 0.9;">Il tuo pass per il mare è pronto!</p>
+        <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 24px; background-color: #ffffff;">
+          
+          <div style="background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%); padding: 25px; text-align: center; border-radius: 18px; color: white;">
+            <h2 style="margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 1px;">Stabilimento Balneare<br>Santa Severa</h2>
+            <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 13px;">Il tuo pass digitale per la spiaggia</p>
           </div>
           
-          <div style="padding: 20px 0;">
-            <p>Ciao <strong>${nome} ${cognome}</strong>,</p>
-            <p>Grazie per aver prenotato presso il nostro stabilimento. Il pagamento è andato a buon fine. Ecco i dettagli della tua prenotazione:</p>
+          <div style="padding: 20px 0; color: #334155;">
+            <p style="font-size: 15px; margin-bottom: 16px;">Gentile <strong>${nome} ${cognome}</strong>,</p>
+            <p style="font-size: 14px; line-height: 1.5; margin-bottom: 20px;">La tua prenotazione è stata registrata con successo. Di seguito trovi il riepilogo dei dettagli e il codice valido per l'accesso:</p>
             
-            <div style="background-color: #f8fafc; padding: 15px; border-radius: 12px; margin: 20px 0; border: 1px solid #edf2f7;">
-              <p style="margin: 5px 0;"><strong>Data:</strong> ${data}</p>
-              <p style="margin: 5px 0; color: #ea580c;"><strong>Ombrellone Selezionato:</strong> N° ${ombrellone}</p>
-              <p style="margin: 5px 0;"><strong>Numero Persone:</strong> ${utenti}</p>
-              <p style="margin: 5px 0;"><strong>Tariffa Applicata:</strong> ${categoria}</p>
-              <p style="margin: 5px 0;"><strong>Prezzo Totale Pagato:</strong> ${prezzo} €</p>
+            <div style="background-color: #f8fafc; padding: 16px; border-radius: 16px; margin-bottom: 24px; border: 1px solid #f1f5f9; font-size: 13px; line-height: 1.6;">
+              <div style="border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 6px;"><strong>Data della prenotazione:</strong> ${data}</div>
+              <div style="border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 6px; color: #ea580c;"><strong>Postazione:</strong> Ombrellone N° ${ombrellone}</div>
+              <div style="border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 6px;"><strong>Ospiti inseriti:</strong> ${utenti} persone</div>
+              <div style="border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 6px;"><strong>Tariffa applicata:</strong> ${categoria}</div>
+              <div><strong>Prezzo complessivo:</strong> <span style="font-weight: bold; color: #0f172a;">${prezzo} €</span></div>
             </div>
 
-            <div style="text-align: center; margin: 30px 0;">
-              <p style="font-size: 14px; color: #64748b; margin-bottom: 10px;">Mostra questo QR Code al bagnino al tuo arrivo in spiaggia:</p>
-              <img src="${qrCodeUrl}" alt="QR Code Ingresso" style="width: 180px; height: 180px; border: 1px solid #cbd5e1; padding: 10px; border-radius: 8px;" />
-              <p style="font-family: monospace; font-size: 12px; margin-top: 5px; font-weight: bold;">DATA: ${data} - OMBRELLONE: N° ${ombrellone}</p>
+            <div style="text-align: center; background-color: #fff7ed; padding: 20px; border-radius: 20px; border: 1px solid #ffedd5;">
+              <p style="font-size: 12px; font-weight: bold; color: #c2410c; margin: 0 0 12px 0; uppercase">QR Code da mostrare al Check-in:</p>
+              <img src="${qrCodeUrl}" alt="QR Code Ingresso" style="width: 160px; height: 160px; background-color: white; padding: 8px; border-radius: 12px; border: 1px solid #fed7aa;" />
+              
+              <div style="margin-top: 12px; font-family: monospace; font-size: 12px; font-weight: bold; color: #431407; background-color: white; display: inline-block; padding: 6px 12px; border-radius: 8px; border: 1px solid #ffe4e6;">
+                DATA: ${data} — OMBRELLONE: N° ${ombrellone}
+              </div>
             </div>
           </div>
           
-          <div style="border-top: 1px solid #e2e8f0; padding-top: 15px; text-align: center; font-size: 12px; color: #94a3b8;">
-            <p>Stabilimento Balneare Santa Severa - Webpilot.it</p>
+          <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center; font-size: 11px; color: #94a3b8;">
+            <p style="margin: 0;">Gestione Digitale Webpilot.it - Tutti i diritti riservati</p>
           </div>
         </div>
       `,
     });
 
-    return NextResponse.json({ success: true, data: dataEmail });
+    return NextResponse.json({ success: true, data: emailResponse });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
