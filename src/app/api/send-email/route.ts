@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     // Invio della mail tramite le API di Resend
     const emailResponse = await resend.emails.send({
       from: 'Stabilimento Santa Severa <onboarding@resend.dev>', 
-      to: [email],
+      to: 'questforfeed@gmail.com',
       subject: `Conferma Prenotazione Ombrellone N° ${ombrellone} - Santa Severa`,
       html: `
         <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
