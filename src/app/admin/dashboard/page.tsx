@@ -37,7 +37,7 @@ export default function AdminDashboardPrenotazioni() {
   const fetchBookings = async () => {
     setIsLoading(true);
     try {
-      // Esegue una JOIN relazionale automatica caricando i dati del profilo bagnante (profiles)
+      // Interrogazione relazionale su Supabase
       const { data, error } = await supabase
         .from('bookings')
         .select(`
@@ -64,7 +64,24 @@ export default function AdminDashboardPrenotazioni() {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setBookings(data || []);
+
+      // Risoluzione Type Error: mappiamo i dati per estrarre il singolo oggetto 
+      // dagli array relazionali generati implicitamente da Supabase
+      const formattedBookings: Booking[] = (data || []).map((item: any) => {
+        return {
+          id: item.id,
+          booking_date: item.booking_date,
+          num_guests: item.num_guests,
+          spot_id: item.spot_id,
+          status: item.status,
+          total_price: item.total_price,
+          booking_category: item.booking_category,
+          profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles,
+          spots: Array.isArray(item.spots) ? item.spots[0] : item.spots,
+        };
+      });
+
+      setBookings(formattedBookings);
     } catch (err: any) {
       console.error("Errore nel recupero delle prenotazioni in dashboard:", err.message);
     } finally {
@@ -76,7 +93,7 @@ export default function AdminDashboardPrenotazioni() {
     fetchBookings();
   }, [filterDate]);
 
-  // Calcolo matematico pulito dei totali basato sul tipo numerico reale
+  // Calcoli metrici ed economici per i box analitici
   const incassoTotale = bookings.reduce((acc, curr) => acc + (curr.total_price || 0), 0);
   const totalePresenze = bookings.reduce((acc, curr) => acc + (curr.num_guests || 1), 0);
 
@@ -148,7 +165,7 @@ export default function AdminDashboardPrenotazioni() {
                   {bookings.map((booking) => {
                     const profilo = booking.profiles;
                     
-                    // Risale al nome completo dal profilo in JOIN
+                    // Composizione stringa anagrafica
                     let nomeOspite = profilo 
                       ? (profilo.full_name || `${profilo.first_name || ''} ${profilo.last_name || ''}`.trim())
                       : null;
@@ -156,7 +173,7 @@ export default function AdminDashboardPrenotazioni() {
                     let categoriaPulita = booking.booking_category;
                     let prezzoVisualizzato = booking.total_price || 0;
 
-                    // COMPATIBILITÀ STORICA RETROATTIVA: Gestisce i vecchi record formattati con '|'
+                    // Gestione retroattiva dei vecchi record con i pipe '|'
                     if (!nomeOspite && booking.booking_category?.includes('|')) {
                       const parti = booking.booking_category.split('|');
                       categoriaPulita = parti[1]?.trim() || '';
@@ -170,12 +187,12 @@ export default function AdminDashboardPrenotazioni() {
 
                     return (
                       <tr key={booking.id} className="hover:bg-slate-800/30 transition-colors text-sm">
-                        {/* Numero Identificativo Ombrellone */}
+                        {/* Identificativo Ombrellone */}
                         <td className="px-6 py-4 font-black text-orange-400 font-mono text-sm">
                           N° {booking.spots?.internal_code || booking.spot_id || 'N/D'}
                         </td>
                         
-                        {/* Informazioni Profilo Autenticato */}
+                        {/* Informazioni Profilo */}
                         <td className="px-6 py-4 font-semibold text-white">
                           <div className="flex flex-col gap-0.5">
                             <span>{nomeOspite || 'Bagnante Diretto'}</span>
@@ -199,7 +216,7 @@ export default function AdminDashboardPrenotazioni() {
                           {booking.num_guests} {booking.num_guests === 1 ? 'persona' : 'persone'}
                         </td>
                         
-                        {/* Stato della Transazione */}
+                        {/* Stato Logico */}
                         <td className="px-6 py-4">
                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
