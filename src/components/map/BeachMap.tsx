@@ -26,7 +26,7 @@ interface DBSpot {
 
 export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   const [reservedSpots, setReservedSpots] = useState<number[]>([]);
-  const [dbSpots, setDbSpots] = useState<DBSpot[]>([]); // Memorizza gli ombrelloni da DB
+  const [dbSpots, setDbSpots] = useState<DBSpot[]>([]);
   const [selectedSpotNumber, setSelectedSpotNumber] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
@@ -37,7 +37,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     const loadBeachData = async () => {
       setIsLoading(true);
       try {
-        // 1. RECUPERA LO STATO DI TUTTI GLI OMBRELLONI (Tabella 'spots')
+        // 1. Recupera gli ombrelloni dal database
         const { data: spotsData } = await supabase
           .from('spots')
           .select('id, internal_code, is_available');
@@ -46,7 +46,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
           setDbSpots(spotsData);
         }
 
-        // 2. RECUPERA LE PRENOTAZIONI DI OGGI
+        // 2. Recupera le prenotazioni attive del giorno selezionato
         const { data: bookingsData } = await supabase
           .from('bookings')
           .select('booking_category, spot_id, status') 
@@ -56,10 +56,13 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         if (bookingsData) {
           const occupati = bookingsData
             .map(b => {
-              // Se la prenotazione ha già lo spot_id compilato come codice numerico o UUID
-              // cerchiamo di risalire al numero, altrimenti facciamo il fallback sul vecchio split della stringa
-              const fallbackNum = parseInt(b.booking_category?.split('|')[0]);
-              return fallbackNum;
+              // Fallback se ci sono ancora record vecchi formattati con stringhe a pipe '|'
+              if (b.booking_category && b.booking_category.includes('|')) {
+                return parseInt(b.booking_category.split('|')[0]);
+              }
+              // Flusso nativo moderno: ricava il numero dall'oggetto o dall'internal_code correlato
+              const spotTrovato = spotsData?.find(s => s.id === b.spot_id);
+              return spotTrovato ? parseInt(spotTrovato.internal_code) : parseInt(b.spot_id);
             })
             .filter(num => !isNaN(num));
           
@@ -75,7 +78,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     loadBeachData();
   }, [selectedDate]);
 
-  // FUNZIONE PER IL CALCOLO DINAMICO DEL PREZZO
+  // Calcolo dinamico del prezzo basato sulle tariffe ufficiali
   const calcolaPrezzoTotale = () => {
     const quotaBaseOmbrellone = 2.0;
     let supplementoPersona = 0.0;
@@ -94,7 +97,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   const prezzoFinale = calcolaPrezzoTotale();
 
-  // GESTIONE PAGAMENTO FITTIZIO + SALVATAGGIO RADDRIZZATO
+  // Processo di pagamento e salvataggio relazionale su Supabase
   const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
     
@@ -102,53 +105,59 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     setIsSubmitting(true);
 
     try {
-      // Controlliamo i duplicati prima di pagare
+      // 1. Recupera la sessione dell'utente autenticato (UUID da auth.users)
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        alert("Sessione scaduta o utente non autenticato. Effettua nuovamente il login.");
+        setIsSubmitting(false);
+        setPaymentProcessing(false);
+        return;
+      }
+
+      // 2. Controllo anti-duplicati sul database per la stessa data
       const { data: existingBookings, error: fetchError } = await supabase
         .from('bookings')
-        .select('booking_category')
+        .select('booking_category, user_id')
         .eq('booking_date', selectedDate)
         .not('status', 'eq', 'cancelled');
 
       if (fetchError) {
-        alert("Errore di controllo: " + fetchError.message);
+        alert("Errore controllo prenotazioni: " + fetchError.message);
         setPaymentProcessing(false);
         setIsSubmitting(false);
         return;
       }
 
-      // Manteniamo il controllo di compatibilità per i record scritti con la vecchia logica
-      const haGiaPrenotatoCategoria = existingBookings?.some(b => {
-        if (!b.booking_category) return false;
-        const parti = b.booking_category.split('|');
-        if (parti.length >= 3) {
-          const catMappa = parti[1].trim();
-          const emailMappa = parti[2].trim().toLowerCase();
-          return catMappa === userData.categoria && emailMappa === userData.email.toLowerCase();
+      const haGiaPrenotato = existingBookings?.some(b => {
+        // Controllo sui record legacy scritti in stringa
+        if (b.booking_category && b.booking_category.includes('|')) {
+          const parti = b.booking_category.split('|');
+          if (parti.length >= 3) {
+            return parti[1].trim() === userData.categoria && parti[2].trim().toLowerCase() === userData.email.toLowerCase();
+          }
         }
-        return false;
+        // Controllo moderno basato sul vincolo relazionale dell'UUID utente
+        return b.user_id === user.id;
       });
 
-      if (haGiaPrenotatoCategoria) {
-        alert(`Attenzione! L'email ${userData.email} ha già una prenotazione attiva per la categoria "${userData.categoria}" in questa data.`);
+      if (haGiaPrenotato) {
+        alert(`Attenzione! Risulta già una prenotazione attiva a tuo nome per la data selezionata.`);
         setPaymentProcessing(false);
         setIsSubmitting(false);
         setSelectedSpotNumber(null);
         return;
       }
 
-      // Simulazione circuito Nexi (3 secondi)
+      // Simulazione transazione finanziaria circuito Nexi
       await new Promise((resolve) => setTimeout(resolve, 3000));
-      
       setPaymentProcessing(false); 
 
-      // TROVA L'ID REALE DELL'OMBRELLONE CORRISPONDENTE AL NUMERO SELEZIONATO
+      // Mappatura dell'ID dell'ombrellone
       const matchingSpot = dbSpots.find(s => parseInt(s.internal_code) === selectedSpotNumber);
       const spotIdToSave = matchingSpot ? matchingSpot.id : selectedSpotNumber.toString();
 
-      // Componiamo il nome completo da salvare nella nuova colonna
-      const nomeCompletoCliente = `${userData.nome} ${userData.cognome}`;
-
-      // INSERIMENTO PULITO NELLE RISPETTIVE COLONNE
+      // 3. Inserimento pulito e relazionale (user_id punta a public.profiles.id)
       const { error } = await supabase
         .from('bookings')
         .insert([
@@ -156,16 +165,17 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
             spot_id: spotIdToSave,
-            total_price: prezzoFinale,             // Prezzo registrato correttamente come numero puro
-            client_name: nomeCompletoCliente,       // Nome registrato nella nuova colonna text
-            booking_category: userData.categoria,   // Categoria pulita senza concatenazioni
+            user_id: user.id,                       // Associa l'UUID dell'utente loggato
+            total_price: prezzoFinale,             // Prezzo salvato come valore numerico decimale puro
+            booking_category: userData.categoria,   // Stringa della sola categoria (es: "Esercito")
             status: 'confirmed'
           }
         ]);
 
       if (error) {
-        alert("Errore durante la registrazione della prenotazione: " + error.message);
+        alert("Errore durante il salvataggio a database: " + error.message);
       } else {
+        // Invio email di conferma transazione tramite API route interna
         try {
           await fetch('/api/send-email', {
             method: 'POST',
@@ -182,14 +192,14 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
             }),
           });
         } catch (emailErr) {
-          console.error("Errore nell'invio dell'email:", emailErr);
+          console.error("Errore di invio notifica email:", emailErr);
         }
 
         setBookingSuccess(true);
         setReservedSpots([...reservedSpots, selectedSpotNumber]);
       }
     } catch (err) {
-      alert("Errore durante il processo di transazione.");
+      alert("Si è verificato un errore critico durante la transazione.");
       setPaymentProcessing(false);
     } finally {
       setIsSubmitting(false);
@@ -312,7 +322,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         </div>
       </div>
 
-      {/* Modale Pop-up */}
+      {/* Modale Riepilogo e Pagamento */}
       {selectedSpotNumber !== null && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center border border-slate-100 scale-in duration-200">
