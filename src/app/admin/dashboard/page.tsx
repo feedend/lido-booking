@@ -1,331 +1,226 @@
 'use client';
-
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { 
-  Layers, 
-  CheckCircle, 
-  XCircle, 
-  FileText, 
-  LogOut, 
-  RefreshCw, 
-  ShieldAlert,
-  Umbrella
-} from 'lucide-react';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-const supabase = supabaseUrl && supabaseAnonKey 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
-
-interface Spot {
-  id: string;
-  internal_code: string;
-  is_available: boolean | string | null;
-  is_active: boolean | string | null;
-  notes: string | null;
-  zone_id: string;
-}
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 
 interface Booking {
   id: string;
   booking_date: string;
-  status: string;
+  num_guests: number;
   spot_id: string;
-  booking_category?: string;
-  internal_code?: string;
+  status: string;
+  total_price: number | null;
+  booking_category: string;
+  profiles?: {
+    full_name: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
+  spots?: {
+    internal_code: string;
+  };
 }
 
-export default function AdminDashboard() {
-  const [spots, setSpots] = useState<Spot[]>([]);
+export default function AdminDashboardPrenotazioni() {
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
-  const [dbError, setDbError] = useState<string | null>(null);
-  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
+  const [filterDate, setFilterDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
 
-  // Genera sempre la mappa 1-174 come base solida di fallback
-  const generateFallback = useCallback((existingSpots: Spot[] = []) => {
-    const fallbackSpots: Spot[] = Array.from({ length: 174 }, (_, i) => {
-      const codeStr = (i + 1).toString();
-      // Se nel DB esiste già lo spot, usa quello, altrimenti crealo in locale
-      const found = existingSpots.find(s => s.internal_code?.toString().trim() === codeStr);
-      return found || {
-        id: `fallback-${codeStr}`,
-        internal_code: codeStr,
-        is_available: true,
-        is_active: true,
-        notes: null,
-        zone_id: 'default-zone'
-      };
-    });
-
-    // Mantiene lo spot testuale "Bagnino" se presente nel DB
-    const bagninoSpot = existingSpots.filter(s => s.internal_code?.toString().trim().toLowerCase() === 'bagnino');
-
-    setSpots([...fallbackSpots, ...bagninoSpot]);
-  }, []);
-
-  const fetchData = useCallback(async () => {
-    if (!supabase) {
-      generateFallback();
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setDbError(null);
-    
+  const fetchBookings = async () => {
+    setIsLoading(true);
     try {
-      // 1. Recupero Prenotazioni
-      const { data: bookingsData, error: bookingsError } = await supabase
+      // Esegue una JOIN relazionale automatica caricando i dati del profilo bagnante (profiles)
+      const { data, error } = await supabase
         .from('bookings')
-        .select('*')
-        .eq('status', 'confirmed');
+        .select(`
+          id,
+          booking_date,
+          num_guests,
+          spot_id,
+          status,
+          total_price,
+          booking_category,
+          spots (
+            internal_code
+          ),
+          profiles (
+            full_name,
+            first_name,
+            last_name,
+            email,
+            phone
+          )
+        `)
+        .eq('booking_date', filterDate)
+        .not('status', 'eq', 'cancelled')
+        .order('created_at', { ascending: true });
 
-      if (!bookingsError && bookingsData) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const todaysBookings = bookingsData.filter(b => {
-          if (!b.booking_date) return false;
-          return b.booking_date.split('T')[0] === todayStr;
-        });
-        setBookings(todaysBookings);
-      }
-
-      // 2. Recupero Spots
-      const { data: spotsData, error: spotsError } = await supabase
-        .from('spots')
-        .select('*');
-
-      if (spotsError) throw spotsError;
-
-      if (!spotsData || spotsData.length === 0) {
-        setDbError("Nessun dato letto da 'spots' (Verifica le policy RLS su Supabase). Mappa forzata attiva.");
-        generateFallback([]);
-      } else {
-        generateFallback(spotsData);
-      }
-
+      if (error) throw error;
+      setBookings(data || []);
     } catch (err: any) {
-      console.error('Errore fetch:', err);
-      setDbError(err.message || "Errore di caricamento.");
-      generateFallback([]);
+      console.error("Errore nel recupero delle prenotazioni in dashboard:", err.message);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  }, [generateFallback]);
+  };
 
   useEffect(() => {
-    let isMounted = true;
-    const checkUser = async () => {
-      if (!supabase) {
-        if (isMounted) fetchData();
-        return;
-      }
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session && isMounted) {
-        router.push('/admin/login');
-      } else if (isMounted) {
-        fetchData();
-      }
-    };
-    checkUser();
-    return () => { isMounted = false; };
-  }, [router, fetchData]);
+    fetchBookings();
+  }, [filterDate]);
 
-  const handleToggleSpot = async (spot: Spot) => {
-    if (!supabase || spot.id.startsWith('fallback-')) {
-      alert("Attenzione: sblocca le policy RLS su Supabase per salvare le modifiche nel database.");
-      return;
-    }
-
-    const isAvailableNow = spot.is_available === true || spot.is_available === 'TRUE' || spot.is_available === 'true';
-    const updatedAvailability = !isAvailableNow;
-
-    const { error } = await supabase
-      .from('spots')
-      .update({ is_available: updatedAvailability })
-      .eq('id', spot.id);
-
-    if (error) {
-      alert("Errore aggiornamento: " + error.message);
-    } else {
-      await fetchData(); 
-      setSelectedSpot(null);
-    }
-  };
-
-  const rows = [
-    { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
-    { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
-    { startL: 41, endL: 50, startR: 51, endR: 60, center: "" },
-    { startL: 61, endL: 70, startR: 71, endR: 80, center: "P" },
-    { startL: 81, endL: 90, startR: 91, endR: 100, center: "a" },
-    { startL: 101, endL: 110, startR: 111, endR: 120, center: "s" },
-    { startL: 121, endL: 129, startR: 130, endR: 139, center: "s" },
-    { startL: 140, endL: 146, startR: 147, endR: 154, center: "e" },
-    { startL: 155, endL: 160, startR: 161, endR: 167, center: "r" },
-    { startL: null, endL: null, startR: 168, endR: 171, center: "a" },
-    { startL: null, endL: null, startR: 172, endR: 174, center: "" },
-  ];
-
-  const renderSpotButton = (spot: Spot) => {
-    const spotCodeClean = spot.internal_code?.toString().trim().toLowerCase();
-    
-    const isBooked = bookings.some(b => {
-      return b.spot_id === spot.id || (b.internal_code?.toString().trim().toLowerCase() === spotCodeClean);
-    });
-
-    const isAvailable = spot.is_available === true || spot.is_available === 'TRUE' || spot.is_available === 'true';
-
-    let bgClass = "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30";
-    if (isBooked) {
-      bgClass = "bg-red-500/20 border-red-500/60 text-red-400 hover:bg-red-500/40";
-    } else if (!isAvailable) {
-      bgClass = "bg-amber-500/20 border-amber-500/60 text-amber-500 hover:bg-amber-500/40";
-    }
-
-    const isSelected = selectedSpot?.id === spot.id;
-    const isLongText = spotCodeClean.length > 3;
-
-    return (
-      <button
-        key={spot.id}
-        onClick={() => setSelectedSpot(spot)}
-        className={`w-9 h-11 border rounded-lg flex flex-col items-center justify-center font-bold transition shadow-sm shrink-0 relative
-          ${bgClass} ${isSelected ? 'ring-2 ring-blue-500 border-transparent scale-105 z-10' : ''}`}
-      >
-        <span className={isLongText ? 'text-[7px] leading-tight text-center px-0.5 uppercase' : 'text-[10px]'}>
-          {spot.internal_code}
-        </span>
-        <span className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
-          isBooked ? 'bg-red-500' : !isAvailable ? 'bg-amber-500' : 'bg-emerald-500'
-        }`} />
-      </button>
-    );
-  };
-
-  const renderAdminSpotByNum = (num: number) => {
-    const targetStr = num.toString();
-    const spot = spots.find(s => s.internal_code?.toString().trim() === targetStr && !s.id.startsWith('fallback-'))
-                 || spots.find(s => s.internal_code?.toString().trim() === targetStr);
-
-    return spot ? renderSpotButton(spot) : null;
-  };
-
-  const renderCenterSpot = (centerLabel: string) => {
-    if (!centerLabel || centerLabel.trim() === "") return <span className="opacity-20">•</span>;
-    const specialSpot = spots.find(s => s.internal_code?.toString().trim().toLowerCase() === centerLabel.trim().toLowerCase());
-    return specialSpot ? renderSpotButton(specialSpot) : <span className="text-slate-500 select-none">{centerLabel}</span>;
-  };
-
-  // Vengono contati solo gli ombrelloni inclusi nella mappa visibile (1-174 + Bagnino)
-  const totalSpots = spots.filter(s => {
-    const num = parseInt(s.internal_code, 10);
-    return (num >= 1 && num <= 174) || s.internal_code?.toString().trim().toLowerCase() === 'bagnino';
-  }).length;
-
-  const closedSpots = spots.filter(s => {
-    const num = parseInt(s.internal_code, 10);
-    const isStandard = (num >= 1 && num <= 174) || s.internal_code?.toString().trim().toLowerCase() === 'bagnino';
-    const isNotAvailable = !(s.is_available === true || s.is_available === 'TRUE' || s.is_available === 'true');
-    return isStandard && isNotAvailable;
-  }).length;
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white text-sm">
-        <RefreshCw className="animate-spin mr-2 h-5 w-5 text-blue-500" /> Caricamento Lido...
-      </div>
-    );
-  }
+  // Calcolo matematico pulito dei totali basato sul tipo numerico reale
+  const incassoTotale = bookings.reduce((acc, curr) => acc + (curr.total_price || 0), 0);
+  const totalePresenze = bookings.reduce((acc, curr) => acc + (curr.num_guests || 1), 0);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
-      <nav className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-600 p-2 rounded-lg text-white"><Layers className="h-5 w-5" /></div>
-          <div>
-            <h1 className="text-lg font-bold text-white">Lido Control Panel</h1>
-            <p className="text-xs text-slate-400">Gestione Mappa</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.push('/admin/prenotazioni')} className="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-2 rounded-lg transition">Prenotazioni</button>
-        </div>
-      </nav>
-
-      <main className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
-        {dbError && (
-          <div className="bg-amber-950/30 border border-amber-900/50 text-amber-400 p-3 rounded-xl text-xs font-medium">
-            ⚠️ {dbError}
-          </div>
-        )}
+    <div className="min-h-screen bg-slate-900 text-slate-100 p-4 sm:p-6 font-sans">
+      <div className="max-w-6xl mx-auto">
         
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-            <p className="text-xs text-slate-400">Ombrelloni Totali</p>
-            <h3 className="text-xl font-bold mt-0.5">{totalSpots}</h3>
+        {/* Intestazione Dashboard */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 bg-slate-800/40 p-6 rounded-2xl border border-slate-700/60 shadow-md">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-white">
+              Pannello Di Controllo Lido
+            </h1>
+            <p className="text-xs text-slate-400 mt-1">Sincronizzazione in tempo reale con i profili utente</p>
           </div>
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-            <p className="text-xs text-slate-400">Prenotati Oggi</p>
-            <h3 className="text-xl font-bold text-emerald-400 mt-0.5">{bookings.length}</h3>
-          </div>
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-            <p className="text-xs text-slate-400">Bloccati Manualmente</p>
-            <h3 className="text-xl font-bold text-amber-500 mt-0.5">{closedSpots}</h3>
+          
+          <div className="flex items-center gap-3 bg-slate-950 p-2 rounded-xl border border-slate-800">
+            <span className="text-xs font-bold text-slate-400 uppercase pl-2">Seleziona Giorno:</span>
+            <input 
+              type="date" 
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-semibold text-white focus:outline-none focus:border-orange-500 cursor-pointer"
+            />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
-          <div className="xl:col-span-3 space-y-6">
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-4 overflow-hidden">
-              <div className="w-full overflow-x-auto pb-2">
-                <div className="flex flex-col gap-2 w-[950px] mx-auto pl-1">
-                  {rows.map((row, rowIndex) => (
-                    <div key={rowIndex} className="flex items-center justify-start gap-3">
-                      <div className="w-[410px] grid grid-cols-10 gap-1 justify-items-start">
-                        {row.startL ? (
-                          <>
-                            {Array.from({ length: 10 - (row.endL! - row.startL! + 1) }).map((_, i) => <div key={`e-l-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />)}
-                            {Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderAdminSpotByNum)}
-                          </>
-                        ) : Array.from({ length: 10 }).map((_, i) => <div key={`b-l-${i}`} className="w-9 h-11" />)}
-                      </div>
-                      <div className="w-12 shrink-0 h-11 flex justify-center items-center font-black text-amber-500 uppercase text-[9px] bg-slate-950 rounded-lg border border-slate-800 shadow-inner">
-                        {renderCenterSpot(row.center)}
-                      </div>
-                      <div className="w-[410px] grid grid-cols-10 gap-1 justify-items-start">
-                        {row.startR ? (
-                          <>
-                            {Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderAdminSpotByNum)}
-                            {Array.from({ length: 10 - (row.endR! - row.startR! + 1) }).map((_, i) => <div key={`e-r-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />)}
-                          </>
-                        ) : Array.from({ length: 10 }).map((_, i) => <div key={`b-r-${i}`} className="w-9 h-11" />)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+        {/* Indicatori Analitici Metrici */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="bg-gradient-to-br from-orange-600/15 via-orange-600/5 to-transparent border border-orange-500/20 p-5 rounded-2xl shadow-sm">
+            <span className="text-[10px] uppercase font-bold text-orange-400 tracking-wider">Incasso Totale Giornaliero</span>
+            <div className="text-2xl font-black text-white mt-1">€ {incassoTotale.toFixed(2)}</div>
+          </div>
+          <div className="bg-slate-800/30 border border-slate-700/50 p-5 rounded-2xl">
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ombrelloni Venduti</span>
+            <div className="text-2xl font-black text-white mt-1">{bookings.length}</div>
+          </div>
+          <div className="bg-slate-800/30 border border-slate-700/50 p-5 rounded-2xl">
+            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Bagnanti Attesi</span>
+            <div className="text-2xl font-black text-white mt-1">{totalePresenze} <span className="text-xs text-slate-400 font-normal">persone</span></div>
+          </div>
+        </div>
+
+        {/* Struttura Tabellare Dati */}
+        <div className="bg-slate-800/20 border border-slate-700/50 rounded-2xl overflow-hidden shadow-2xl">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mb-3"></div>
+              <p className="text-xs text-slate-400">Interrogazione database in corso...</p>
             </div>
-          </div>
+          ) : bookings.length === 0 ? (
+            <div className="text-center py-16 text-slate-500 text-sm font-medium">
+              Nessun ombrellone occupato per la data selezionata.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-800/70 border-b border-slate-700 text-[11px] uppercase tracking-wider text-slate-400 font-bold">
+                    <th className="px-6 py-4">Posto</th>
+                    <th className="px-6 py-4">Anagrafica Bagnante</th>
+                    <th className="px-6 py-4">Tariffa Applicata</th>
+                    <th className="px-6 py-4">Ospiti</th>
+                    <th className="px-6 py-4">Stato Logico</th>
+                    <th className="px-6 py-4 text-right">Prezzo Pagato</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/40">
+                  {bookings.map((booking) => {
+                    const profilo = booking.profiles;
+                    
+                    // Risale al nome completo dal profilo in JOIN
+                    let nomeOspite = profilo 
+                      ? (profilo.full_name || `${profilo.first_name || ''} ${profilo.last_name || ''}`.trim())
+                      : null;
+                      
+                    let categoriaPulita = booking.booking_category;
+                    let prezzoVisualizzato = booking.total_price || 0;
 
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl h-fit">
-            <h2 className="text-md font-bold text-white border-b border-slate-800 pb-3 mb-4">Dettaglio Ombrellone</h2>
-            {selectedSpot ? (
-              <div className="space-y-4">
-                <h3 className="text-lg font-black text-white">Codice: {selectedSpot.internal_code}</h3>
-                <button onClick={() => handleToggleSpot(selectedSpot)} className="w-full bg-amber-600 text-white text-xs font-semibold py-2 rounded-lg">
-                  Inverti Stato Vendita
-                </button>
-              </div>
-            ) : <p className="text-slate-500 text-xs text-center py-10">Seleziona un ombrellone.</p>}
-          </div>
+                    // COMPATIBILITÀ STORICA RETROATTIVA: Gestisce i vecchi record formattati con '|'
+                    if (!nomeOspite && booking.booking_category?.includes('|')) {
+                      const parti = booking.booking_category.split('|');
+                      categoriaPulita = parti[1]?.trim() || '';
+                      nomeOspite = `Ospite Storico (${parti[2]?.trim() || 'Info'})`;
+                      
+                      if (booking.booking_category.includes('Prezzo:')) {
+                        const match = booking.booking_category.match(/Prezzo:\s*([0-9.]+)/);
+                        if (match) prezzoVisualizzato = parseFloat(match[1]);
+                      }
+                    }
+
+                    return (
+                      <tr key={booking.id} className="hover:bg-slate-800/30 transition-colors text-sm">
+                        {/* Numero Identificativo Ombrellone */}
+                        <td className="px-6 py-4 font-black text-orange-400 font-mono text-sm">
+                          N° {booking.spots?.internal_code || booking.spot_id || 'N/D'}
+                        </td>
+                        
+                        {/* Informazioni Profilo Autenticato */}
+                        <td className="px-6 py-4 font-semibold text-white">
+                          <div className="flex flex-col gap-0.5">
+                            <span>{nomeOspite || 'Bagnante Diretto'}</span>
+                            {profilo?.email && (
+                              <span className="text-[11px] text-slate-500 font-normal font-mono">
+                                {profilo.email} {profilo.phone ? `| ${profilo.phone}` : ''}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        
+                        {/* Categoria di Tariffazione */}
+                        <td className="px-6 py-4">
+                          <span className="px-2.5 py-0.5 text-xs bg-slate-800 text-slate-300 border border-slate-700 rounded-md font-medium">
+                            {categoriaPulita || 'Standard'}
+                          </span>
+                        </td>
+                        
+                        {/* Numero Persone */}
+                        <td className="px-6 py-4 text-slate-300 font-medium">
+                          {booking.num_guests} {booking.num_guests === 1 ? 'persona' : 'persone'}
+                        </td>
+                        
+                        {/* Stato della Transazione */}
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                            Confermato
+                          </span>
+                        </td>
+                        
+                        {/* Quota Finanziaria */}
+                        <td className="px-6 py-4 text-right font-mono font-black text-white text-md">
+                          € {prezzoVisualizzato.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </main>
+
+      </div>
     </div>
   );
 }
