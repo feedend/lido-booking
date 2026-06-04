@@ -18,38 +18,61 @@ type BeachMapProps = {
   };
 };
 
+interface DBSpot {
+  id: string;
+  internal_code: string;
+  is_available: boolean;
+}
+
 export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   const [reservedSpots, setReservedSpots] = useState<number[]>([]);
+  const [dbSpots, setDbSpots] = useState<DBSpot[]>([]); // Memorizza gli ombrelloni da DB
   const [selectedSpotNumber, setSelectedSpotNumber] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [paymentProcessing, setPaymentProcessing] = useState(false); // Stato per il pagamento fittizio
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const loadBookings = async () => {
+    const loadBeachData = async () => {
       setIsLoading(true);
       try {
+        // 1. RECUPERA LO STATO DI TUTTI GLI OMBRELLONI (Tabella 'spots')
+        const { data: spotsData } = await supabase
+          .from('spots')
+          .select('id, internal_code, is_available');
+        
+        if (spotsData) {
+          setDbSpots(spotsData);
+        }
+
+        // 2. RECUPERA LE PRENOTAZIONI DI OGGI
         const { data: bookingsData } = await supabase
           .from('bookings')
-          .select('booking_category, status') 
+          .select('booking_category, spot_id, status') 
           .eq('booking_date', selectedDate)
           .not('status', 'eq', 'cancelled');
 
         if (bookingsData) {
           const occupati = bookingsData
-            .map(b => parseInt(b.booking_category.split('|')[0]))
+            .map(b => {
+              // Se la prenotazione ha già lo spot_id compilato come codice numerico o UUID
+              // cerchiamo di risalire al numero, altrimenti facciamo il fallback sul vecchio split della stringa
+              const fallbackNum = parseInt(b.booking_category.split('|')[0]);
+              return fallbackNum;
+            })
             .filter(num => !isNaN(num));
+          
           setReservedSpots(occupati);
         }
       } catch (err) {
-        console.error("Errore nel caricamento delle prenotazioni:", err);
+        console.error("Errore nel caricamento dei dati della spiaggia:", err);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadBookings();
+    loadBeachData();
   }, [selectedDate]);
 
   // FUNZIONE PER IL CALCOLO DINAMICO DEL PREZZO
@@ -71,16 +94,15 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   const prezzoFinale = calcolaPrezzoTotale();
 
-  // FUNZIONE PRINCIPALE: GESTIONE PAGAMENTO FITTIZIO + SALVATAGGIO
+  // GESTIONE PAGAMENTO FITTIZIO + SALVATAGGIO
   const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
     
-    // FASE 1: Avvio simulazione pagamento
     setPaymentProcessing(true);
     setIsSubmitting(true);
 
     try {
-      // Controlliamo prima se l'ombrellone o la categoria sono già occupati per evitare brutte sorprese alla fine del pagamento
+      // Controlliamo i duplicati prima di pagare
       const { data: existingBookings, error: fetchError } = await supabase
         .from('bookings')
         .select('booking_category')
@@ -94,7 +116,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      // Controllo anti-duplicato categoria/email
       const haGiaPrenotatoCategoria = existingBookings?.some(b => {
         const parti = b.booking_category.split('|');
         if (parti.length >= 3) {
@@ -113,19 +134,23 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      // Simuliamo l'attesa del circuito bancario (3 secondi di delay)
+      // Simulazione circuito Nexi (3 secondi)
       await new Promise((resolve) => setTimeout(resolve, 3000));
       
-      // FASE 2: Pagamento "approvato", procediamo alla scrittura su Supabase
-      setPaymentProcessing(false); // Fine animazione pagamento bancario
+      setPaymentProcessing(false); 
 
-// ... (Tutto il codice precedente di Supabase rimane identico)
+      // TROVA L'ID REALE DELL'OMBRELLONE CORRISPONDENTE AL NUMERO SELEZIONATO
+      const matchingSpot = dbSpots.find(s => parseInt(s.internal_code) === selectedSpotNumber);
+      const spotIdToSave = matchingSpot ? matchingSpot.id : selectedSpotNumber.toString();
+
+      // INSERIMENTO DOPPIO: Scrive sia il formato vecchio in stringa, sia lo spot_id pulito per la Dashboard Admin
       const { error } = await supabase
         .from('bookings')
         .insert([
           {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
+            spot_id: spotIdToSave, // <--- QUESTO COLLEGHERÀ L'ADMIN ALLA MAPPA IN TEMPO REALE
             booking_category: `${selectedSpotNumber} | ${userData.categoria} | ${userData.email.trim()} | Prezzo: ${prezzoFinale.toFixed(2)}€`,
             status: 'confirmed'
           }
@@ -134,13 +159,10 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       if (error) {
         alert("Errore durante la registrazione della prenotazione: " + error.message);
       } else {
-        // INIZIO LOGICA INVIO EMAIL AUTOMATICA
         try {
           await fetch('/api/send-email', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               email: userData.email.trim(),
               nome: userData.nome,
@@ -153,10 +175,8 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
             }),
           });
         } catch (emailErr) {
-          console.error("Errore nell'invio dell'email di riepilogo:", emailErr);
-          // Non blocchiamo l'utente se l'email fallisce ma la prenotazione a DB è andata a buon fine
+          console.error("Errore nell'invio dell'email:", emailErr);
         }
-        // FINE LOGICA INVIO EMAIL
 
         setBookingSuccess(true);
         setReservedSpots([...reservedSpots, selectedSpotNumber]);
@@ -169,10 +189,9 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     }
   };
 
- // NUOVO METODO FUNZIONANTE E IMMEDIATO
-const qrCodeUrl = selectedSpotNumber 
-  ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${selectedDate}|POSTO:${selectedSpotNumber}|EMAIL:${userData.email}`)}`
-  : '';
+  const qrCodeUrl = selectedSpotNumber 
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${selectedDate}|POSTO:${selectedSpotNumber}|EMAIL:${userData.email}`)}`
+    : '';
 
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
@@ -189,9 +208,15 @@ const qrCodeUrl = selectedSpotNumber
   ];
 
   const renderSpot = (num: number) => {
+    // 1. Controlla se è occupato da una prenotazione cliente
     const isDbReserved = reservedSpots.includes(num);
-    const isCsmReserved = num >= 11 && num <= 15;
-    const isReserved = isDbReserved || isCsmReserved;
+    
+    // 2. Controlla lo stato in tempo reale sul database (se l'Admin lo ha disattivato o se è 11-15 di default)
+    const correspondingDbSpot = dbSpots.find(s => parseInt(s.internal_code) === num);
+    const isDeactivatedByAdmin = correspondingDbSpot ? correspondingDbSpot.is_available === false : false;
+
+    // Un ombrellone è bloccato se è prenotato OPPURE se l'Admin lo ha chiuso/disattivato
+    const isReserved = isDbReserved || isDeactivatedByAdmin;
 
     return (
       <div
@@ -234,7 +259,6 @@ const qrCodeUrl = selectedSpotNumber
 
   return (
     <div className="w-full max-w-5xl mx-auto bg-amber-50/40 p-4 sm:p-6 rounded-3xl shadow-xl border border-orange-100/70 relative">
-      
       <div className="block md:hidden text-center text-[10px] text-orange-800/70 font-bold uppercase tracking-wider mb-2 animate-pulse">
         ↔ Scorri lateralmente per vedere tutta la spiaggia ↔
       </div>
@@ -286,26 +310,18 @@ const qrCodeUrl = selectedSpotNumber
         </div>
       </div>
 
-      {/* Modale Pop-up con Flusso di Pagamento Fittizio e QR Code Finale */}
+      {/* Modale Pop-up */}
       {selectedSpotNumber !== null && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center border border-slate-100 scale-in duration-200">
-            
             {bookingSuccess ? (
-              /* SCHERMATA FINALE: SUCCESSO CON QR CODE */
               <div className="py-2 flex flex-col items-center">
                 <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-2xl mb-3">✓</div>
                 <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Prenotazione Confermata</h3>
                 <p className="text-xs text-slate-500 mt-1 mb-4">Mostra questo pass all'ingresso dello stabilimento</p>
                 
-                {/* QR CODE GENERATO CON DATA E NUMERO */}
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner mb-3">
-                  <img 
-                    src={qrCodeUrl} 
-                    alt="QR Code Prenotazione" 
-                    className="w-44 h-44 mix-blend-multiply"
-                  />
-                  {/* DETTAGLI COSTRUTTIVI RICHIESTI SOTTO L'IMMAGINE */}
+                  <img src={qrCodeUrl} alt="QR Code Prenotazione" className="w-44 h-44 mix-blend-multiply" />
                   <div className="mt-3 pt-2.5 border-t border-slate-200 font-mono text-xs text-slate-800 space-y-1 bg-white p-2 rounded-xl border">
                     <p><strong>DATA:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
                     <p className="text-orange-600 font-bold"><strong>OMBRELLONE N°:</strong> {selectedSpotNumber}</p>
@@ -323,7 +339,6 @@ const qrCodeUrl = selectedSpotNumber
                 </button>
               </div>
             ) : (
-              /* SCHERMATA INIZIALE: RIEPILOGO E CIRCUITO DI PAGAMENTO */
               <>
                 <h3 className="text-lg font-black text-orange-950 uppercase tracking-tight mb-2">Riepilogo e Pagamento</h3>
                 <p className="text-sm text-slate-600 mb-4">
