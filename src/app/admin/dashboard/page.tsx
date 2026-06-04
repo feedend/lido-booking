@@ -48,7 +48,7 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Recupera tutti gli ombrelloni attivi
+      // 1. Recupera tutti gli ombrelloni
       const { data: spotsData, error: spotsError } = await supabase
         .from('spots')
         .select('*');
@@ -68,13 +68,17 @@ export default function AdminDashboard() {
 
       // Filtra le prenotazioni per mostrare solo quelle valide per OGGI
       const todaysBookings = (bookingsData || []).filter(b => {
+        if (!b.booking_date) return false;
         const bDate = b.booking_date.split('T')[0];
         return bDate === todayStr;
       });
 
-      // Ordina gli ombrelloni numericamente in base al codice interno
+      // ORDINAMENTO SICURO (Evita il crash se ci sono codici non numerici)
       const sortedSpots = (spotsData || []).sort((a, b) => {
-        return parseInt(a.internal_code) - parseInt(b.internal_code);
+        return (a.internal_code || '').localeCompare(b.internal_code || '', undefined, {
+          numeric: true,
+          sensitivity: 'base'
+        });
       });
 
       setSpots(sortedSpots);
@@ -85,7 +89,6 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
