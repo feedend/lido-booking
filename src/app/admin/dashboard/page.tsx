@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { 
-  Calendar, 
   Layers, 
   CheckCircle, 
   XCircle, 
@@ -22,9 +21,10 @@ const supabase = createClient(
 
 interface Spot {
   id: string;
-  spot_number: string;
-  is_available: boolean;
-  notes: string;
+  internal_code: string; // Allineato al Database
+  is_available: boolean; // Allineato al Database
+  is_active: boolean;    // Allineato al Database
+  notes: string | null;
   zone_id: string;
 }
 
@@ -47,17 +47,22 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Recupera gli ombrelloni (spots)
-      const { data: spotsData } = await supabase
+      // 1. Recupera gli ombrelloni ordinati per codice interno
+      const { data: spotsData, error: spotsError } = await supabase
         .from('spots')
         .select('*')
-        .order('spot_number');
+        .eq('is_active', true) // Mostra solo quelli attivi
+        .order('internal_code');
+
+      if (spotsError) throw spotsError;
 
       // 2. Recupera le prenotazioni attive
-      const { data: bookingsData } = await supabase
+      const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select('*')
         .eq('status', 'confirmed');
+
+      if (bookingsError) throw bookingsError;
 
       if (spotsData) setSpots(spotsData);
       if (bookingsData) setBookings(bookingsData);
@@ -69,7 +74,6 @@ export default function AdminDashboard() {
   };
 
   useEffect(() => {
-    // Controlla se l'utente è loggato, altrimenti lo rimanda al login
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -89,7 +93,7 @@ export default function AdminDashboard() {
       .from('spots')
       .update({ 
         is_available: updatedAvailability,
-        notes: updatedAvailability ? '' : (noteBlock || 'Chiuso manualmente')
+        notes: updatedAvailability ? null : (noteBlock || 'Chiuso manualmente')
       })
       .eq('id', spot.id);
 
@@ -182,11 +186,11 @@ export default function AdminDashboard() {
         {/* CONTENUTO PRINCIPALE */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* GRIGLIA OMBRELLONI (A SINISTRA) */}
+          {/* GRIGLIA OMBRELLONI */}
           <div className="lg:col-span-2 bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-4">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Umbrella className="h-5 w-5 text-blue-500" /> Stato Spiaggia Interattivo
+                <Umbrella className="h-5 w-5 text-blue-500" /> Stato Beach Club Interattivo
               </h2>
               <button onClick={fetchData} className="text-slate-400 hover:text-white p-1 transition">
                 <RefreshCw className="h-4 w-4" />
@@ -199,7 +203,7 @@ export default function AdminDashboard() {
                 
                 let bgClass = "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20"; // Libero
                 if (!spot.is_available) bgClass = "bg-amber-500/10 border-amber-500/40 text-amber-500 hover:bg-amber-500/20"; // Bloccato Admin
-                if (isBooked) bgClass = "bg-red-500/10 border-red-500/40 text-red-400 hover:bg-red-500/20"; // Prenotato Cliente
+                if (isBooked) bgClass = "bg-red-500/10 border-red-500/40 text-red-400 hover:bg-red-500/20"; // Prenotato
 
                 return (
                   <button
@@ -208,14 +212,14 @@ export default function AdminDashboard() {
                     className={`aspect-square border rounded-xl flex flex-col items-center justify-center gap-1 font-semibold text-sm transition shadow-sm ${bgClass}`}
                   >
                     <span className="text-xs opacity-60">N°</span>
-                    <span className="text-base font-bold">{spot.spot_number}</span>
+                    <span className="text-base font-bold">{spot.internal_code}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* PANNELLO DI DETTAGLIO / CONTROLLO (A DESTRA) */}
+          {/* PANNELLO DI DETTAGLIO */}
           <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl h-fit">
             <h2 className="text-lg font-bold text-white border-b border-slate-800 pb-4 mb-4">
               Dettaglio Ombrellone
@@ -225,7 +229,7 @@ export default function AdminDashboard() {
               <div className="space-y-6">
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="text-2xl font-black text-white">Ombrellone {selectedSpot.spot_number}</span>
+                    <span className="text-2xl font-black text-white">Ombrellone {selectedSpot.internal_code}</span>
                     <span className={`px-2 py-1 text-xs rounded-md font-bold uppercase tracking-wider ${
                       selectedSpot.is_available ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
                     }`}>
