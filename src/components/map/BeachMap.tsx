@@ -58,7 +58,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
             .map(b => {
               // Se la prenotazione ha già lo spot_id compilato come codice numerico o UUID
               // cerchiamo di risalire al numero, altrimenti facciamo il fallback sul vecchio split della stringa
-              const fallbackNum = parseInt(b.booking_category.split('|')[0]);
+              const fallbackNum = parseInt(b.booking_category?.split('|')[0]);
               return fallbackNum;
             })
             .filter(num => !isNaN(num));
@@ -94,7 +94,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   const prezzoFinale = calcolaPrezzoTotale();
 
-  // GESTIONE PAGAMENTO FITTIZIO + SALVATAGGIO
+  // GESTIONE PAGAMENTO FITTIZIO + SALVATAGGIO RADDRIZZATO
   const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
     
@@ -116,7 +116,9 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
+      // Manteniamo il controllo di compatibilità per i record scritti con la vecchia logica
       const haGiaPrenotatoCategoria = existingBookings?.some(b => {
+        if (!b.booking_category) return false;
         const parti = b.booking_category.split('|');
         if (parti.length >= 3) {
           const catMappa = parti[1].trim();
@@ -143,15 +145,20 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       const matchingSpot = dbSpots.find(s => parseInt(s.internal_code) === selectedSpotNumber);
       const spotIdToSave = matchingSpot ? matchingSpot.id : selectedSpotNumber.toString();
 
-      // INSERIMENTO DOPPIO: Scrive sia il formato vecchio in stringa, sia lo spot_id pulito per la Dashboard Admin
+      // Componiamo il nome completo da salvare nella nuova colonna
+      const nomeCompletoCliente = `${userData.nome} ${userData.cognome}`;
+
+      // INSERIMENTO PULITO NELLE RISPETTIVE COLONNE
       const { error } = await supabase
         .from('bookings')
         .insert([
           {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
-            spot_id: spotIdToSave, // <--- QUESTO COLLEGHERÀ L'ADMIN ALLA MAPPA IN TEMPO REALE
-            booking_category: `${selectedSpotNumber} | ${userData.categoria} | ${userData.email.trim()} | Prezzo: ${prezzoFinale.toFixed(2)}€`,
+            spot_id: spotIdToSave,
+            total_price: prezzoFinale,             // Prezzo registrato correttamente come numero puro
+            client_name: nomeCompletoCliente,       // Nome registrato nella nuova colonna text
+            booking_category: userData.categoria,   // Categoria pulita senza concatenazioni
             status: 'confirmed'
           }
         ]);
@@ -208,14 +215,9 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   ];
 
   const renderSpot = (num: number) => {
-    // 1. Controlla se è occupato da una prenotazione cliente
     const isDbReserved = reservedSpots.includes(num);
-    
-    // 2. Controlla lo stato in tempo reale sul database (se l'Admin lo ha disattivato o se è 11-15 di default)
     const correspondingDbSpot = dbSpots.find(s => parseInt(s.internal_code) === num);
     const isDeactivatedByAdmin = correspondingDbSpot ? correspondingDbSpot.is_available === false : false;
-
-    // Un ombrellone è bloccato se è prenotato OPPURE se l'Admin lo ha chiuso/disattivato
     const isReserved = isDbReserved || isDeactivatedByAdmin;
 
     return (
