@@ -21,9 +21,9 @@ const supabase = createClient(
 
 interface Spot {
   id: string;
-  internal_code: string; // Allineato al Database
-  is_available: boolean; // Allineato al Database
-  is_active: boolean;    // Allineato al Database
+  internal_code: string;
+  is_available: boolean;
+  is_active: boolean;
   notes: string | null;
   zone_id: string;
 }
@@ -33,6 +33,7 @@ interface Booking {
   booking_date: string;
   status: string;
   spot_id: string;
+  internal_code?: string; // Supporto se salvato come codice stringa
 }
 
 export default function AdminDashboard() {
@@ -43,26 +44,41 @@ export default function AdminDashboard() {
   const [noteBlock, setNoteBlock] = useState('');
   const router = useRouter();
 
-// Carica i dati iniziali dal Database (Versione pulita per evitare il 400)
+  // Carica i dati iniziali dal Database
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Recupera TUTTI gli ombrelloni senza filtri aggressivi
+      // 1. Recupera tutti gli ombrelloni attivi
       const { data: spotsData, error: spotsError } = await supabase
         .from('spots')
         .select('*');
 
       if (spotsError) throw spotsError;
 
-      // 2. Recupera le prenotazioni attive
+      // 2. Recupera le prenotazioni confermate
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
-        .select('*');
+        .select('*')
+        .eq('status', 'confirmed');
 
       if (bookingsError) throw bookingsError;
 
-      if (spotsData) setSpots(spotsData);
-      if (bookingsData) setBookings(bookingsData);
+      // Sincronizza la data odierna (formato YYYY-MM-DD locale)
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      // Filtra le prenotazioni per mostrare solo quelle valide per OGGI
+      const todaysBookings = (bookingsData || []).filter(b => {
+        const bDate = b.booking_date.split('T')[0];
+        return bDate === todayStr;
+      });
+
+      // Ordina gli ombrelloni numericamente in base al codice interno
+      const sortedSpots = (spotsData || []).sort((a, b) => {
+        return parseInt(a.internal_code) - parseInt(b.internal_code);
+      });
+
+      setSpots(sortedSpots);
+      setBookings(todaysBookings);
     } catch (err) {
       console.error('Errore nel caricamento dati:', err);
     } finally {
@@ -96,20 +112,17 @@ export default function AdminDashboard() {
     if (error) {
       alert("Errore durante l'aggiornamento dell'ombrellone");
     } else {
-      // Aspettiamo che i dati siano aggiornati nello stato prima di resettare
       await fetchData(); 
       setSelectedSpot(null);
       setNoteBlock('');
     }
   };
 
-  // Funzione di Logout
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/admin/login');
   };
 
-  // Calcolo statistiche rapide
   const totalSpots = spots.length;
   const closedSpots = spots.filter(s => !s.is_available).length;
   const activeBookingsCount = bookings.length;
@@ -196,11 +209,17 @@ export default function AdminDashboard() {
 
             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
               {spots.map((spot) => {
-                const isBooked = bookings.some(b => b.spot_id === spot.id);
+                // Controllo flessibile: verifica se corrisponde l'id O il codice stringa (es. '12')
+                const isBooked = bookings.some(b => b.spot_id === spot.id || b.internal_code === spot.internal_code || (b as any).spot_code === spot.internal_code);
                 
-                let bgClass = "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20"; // Libero
-                if (!spot.is_available) bgClass = "bg-amber-500/10 border-amber-500/40 text-amber-500 hover:bg-amber-500/20"; // Bloccato Admin
-                if (isBooked) bgClass = "bg-red-500/10 border-red-500/40 text-red-400 hover:bg-red-500/20"; // Prenotato
+                let bgClass = "";
+                if (isBooked) {
+                  bgClass = "bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30";
+                } else if (!spot.is_available) {
+                  bgClass = "bg-amber-500/10 border-amber-500/40 text-amber-500 hover:bg-amber-500/20";
+                } else {
+                  bgClass = "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20";
+                }
 
                 return (
                   <button
@@ -210,6 +229,9 @@ export default function AdminDashboard() {
                   >
                     <span className="text-xs opacity-60">N°</span>
                     <span className="text-base font-bold">{spot.internal_code}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      isBooked ? 'bg-red-500' : !spot.is_available ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`} />
                   </button>
                 );
               })}
@@ -228,9 +250,13 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between">
                     <span className="text-2xl font-black text-white">Ombrellone {selectedSpot.internal_code}</span>
                     <span className={`px-2 py-1 text-xs rounded-md font-bold uppercase tracking-wider ${
-                      selectedSpot.is_available ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                      bookings.some(b => b.spot_id === selectedSpot.id || b.internal_code === selectedSpot.internal_code)
+                        ? 'bg-red-500/20 text-red-400'
+                        : selectedSpot.is_available ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
                     }`}>
-                      {selectedSpot.is_available ? 'In Vendita Online' : 'Bloccato / Privato'}
+                      {bookings.some(b => b.spot_id === selectedSpot.id || b.internal_code === selectedSpot.internal_code)
+                        ? 'Occupato Oggi'
+                        : selectedSpot.is_available ? 'In Vendita Online' : 'Bloccato / Privato'}
                     </span>
                   </div>
                   {selectedSpot.notes && (
@@ -243,7 +269,11 @@ export default function AdminDashboard() {
                 <div className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-xl">
                   <h4 className="text-sm font-semibold text-slate-300">Azioni Rapide</h4>
                   
-                  {selectedSpot.is_available ? (
+                  {bookings.some(b => b.spot_id === selectedSpot.id || b.internal_code === selectedSpot.internal_code) ? (
+                    <p className="text-xs text-red-400 text-center py-2 bg-red-950/20 rounded-lg border border-red-900/30">
+                      Questo ombrellone è occupato da un cliente per la giornata di oggi. Gestisci lo stato dal registro prenotazioni.
+                    </p>
+                  ) : selectedSpot.is_available ? (
                     <div className="space-y-2">
                       <label className="text-xs text-slate-400">Motivo del blocco (opzionale):</label>
                       <input 
