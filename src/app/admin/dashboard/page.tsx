@@ -33,7 +33,8 @@ interface Booking {
   booking_date: string;
   status: string;
   spot_id: string;
-  internal_code?: string; // Supporto se salvato come codice stringa
+  booking_category?: string;
+  internal_code?: string;
 }
 
 export default function AdminDashboard() {
@@ -44,7 +45,7 @@ export default function AdminDashboard() {
   const [noteBlock, setNoteBlock] = useState('');
   const router = useRouter();
 
- // Carica i dati iniziali dal Database (Dashboard Admin)
+  // Carica i dati iniziali dal Database (Dashboard Admin)
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -73,17 +74,7 @@ export default function AdminDashboard() {
         return bDate === todayStr;
       });
 
-      // ORDINAMENTO SICURO (Previene crash se ci sono codici strani o vuoti)
-      const sortedSpots = (spotsData || []).sort((a, b) => {
-        const codeA = a.internal_code ? a.internal_code.toString() : '';
-        const codeB = b.internal_code ? b.internal_code.toString() : '';
-        return codeA.localeCompare(codeB, undefined, {
-          numeric: true,
-          sensitivity: 'base'
-        });
-      });
-
-      setSpots(sortedSpots);
+      setSpots(spotsData || []);
       setBookings(todaysBookings);
     } catch (err) {
       console.error('Errore nel caricamento dati in Dashboard:', err);
@@ -91,6 +82,7 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -132,6 +124,59 @@ export default function AdminDashboard() {
   const closedSpots = spots.filter(s => !s.is_available).length;
   const activeBookingsCount = bookings.length;
 
+  // MATRICE GEOMETRICA REALE DELLA SPIAGGIA (Sincronizzata con il Client)
+  const rows = [
+    { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
+    { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
+    { startL: 41, endL: 50, startR: 51, endR: 60, center: "" },
+    { startL: 61, endL: 70, startR: 71, endR: 80, center: "P" },
+    { startL: 81, endL: 90, startR: 91, endR: 100, center: "a" },
+    { startL: 101, endL: 110, startR: 111, endR: 120, center: "s" },
+    { startL: 121, endL: 129, startR: 130, endR: 139, center: "s" },
+    { startL: 140, endL: 146, startR: 147, endR: 154, center: "e" },
+    { startL: 155, endL: 160, startR: 161, endR: 167, center: "r" },
+    { startL: null, endL: null, startR: 168, endR: 171, center: "a" },
+    { startL: null, endL: null, startR: 172, endR: 174, center: "" },
+  ];
+
+  const renderAdminSpot = (num: number) => {
+    // Trova l'oggetto spot corrispondente nel database
+    const spot = spots.find(s => parseInt(s.internal_code) === num);
+    if (!spot) return <div key={`missing-${num}`} className="w-10 h-10 bg-slate-900 border border-dashed border-slate-800 rounded opacity-40 shrink-0" />;
+
+    // Controllo flessibile e blindato per verificare se è prenotato oggi
+    const isBooked = bookings.some(b => 
+      b.spot_id === spot.id || 
+      b.internal_code === spot.internal_code || 
+      (b.booking_category && parseInt(b.booking_category.split('|')[0]) === num)
+    );
+
+    let bgClass = "";
+    if (isBooked) {
+      bgClass = "bg-red-500/20 border-red-500/60 text-red-400 hover:bg-red-500/40";
+    } else if (!spot.is_available) {
+      bgClass = "bg-amber-500/20 border-amber-500/60 text-amber-500 hover:bg-amber-500/40";
+    } else {
+      bgClass = "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30";
+    }
+
+    const isSelected = selectedSpot?.id === spot.id;
+
+    return (
+      <button
+        key={spot.id}
+        onClick={() => setSelectedSpot(spot)}
+        className={`w-9 h-11 border rounded-lg flex flex-col items-center justify-center text-[10px] font-bold transition shadow-sm shrink-0 relative
+          ${bgClass} ${isSelected ? 'ring-2 ring-blue-500 border-transparent scale-105 z-10' : ''}`}
+      >
+        <span>{spot.internal_code}</span>
+        <span className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
+          isBooked ? 'bg-red-500' : !spot.is_available ? 'bg-amber-500' : 'bg-emerald-500'
+        }`} />
+      </button>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white text-lg font-medium">
@@ -171,75 +216,96 @@ export default function AdminDashboard() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto p-6 md:p-8 space-y-8">
+      <main className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
         
         {/* STATS CARDS */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex items-center justify-between">
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-400">Ombrelloni Totali</p>
-              <h3 className="text-3xl font-bold text-white mt-1">{totalSpots}</h3>
+              <p className="text-xs font-medium text-slate-400">Ombrelloni Totali</p>
+              <h3 className="text-2xl font-bold text-white mt-1">{totalSpots}</h3>
             </div>
-            <Umbrella className="h-10 w-10 text-slate-600" />
+            <Umbrella className="h-8 w-8 text-slate-600" />
           </div>
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex items-center justify-between">
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-400">Prenotati Oggi</p>
-              <h3 className="text-3xl font-bold text-emerald-400 mt-1">{activeBookingsCount}</h3>
+              <p className="text-xs font-medium text-slate-400">Prenotati Oggi</p>
+              <h3 className="text-2xl font-bold text-emerald-400 mt-1">{activeBookingsCount}</h3>
             </div>
-            <CheckCircle className="h-10 w-10 text-emerald-600/50" />
+            <CheckCircle className="h-8 w-8 text-emerald-600/50" />
           </div>
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex items-center justify-between">
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-400">Bloccati/Manutenzione</p>
-              <h3 className="text-3xl font-bold text-amber-500 mt-1">{closedSpots}</h3>
+              <p className="text-xs font-medium text-slate-400">Bloccati / Chiusi</p>
+              <h3 className="text-2xl font-bold text-amber-500 mt-1">{closedSpots}</h3>
             </div>
-            <ShieldAlert className="h-10 w-10 text-amber-600/50" />
+            <ShieldAlert className="h-8 w-8 text-amber-600/50" />
           </div>
         </div>
 
         {/* CONTENUTO PRINCIPALE */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
           
-          {/* GRIGLIA OMBRELLONI */}
-          <div className="lg:col-span-2 bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Umbrella className="h-5 w-5 text-blue-500" /> Stato Beach Club Interattivo
+          {/* MAPPA REALE DELLA SPIAGGIA LATO ADMIN */}
+          <div className="xl:col-span-3 bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-4 overflow-hidden">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Umbrella className="h-4 w-4 text-blue-500" /> Disposizione Planimetrica Spiaggia
               </h2>
               <button onClick={fetchData} className="text-slate-400 hover:text-white p-1 transition">
                 <RefreshCw className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
-              {spots.map((spot) => {
-                // Controllo flessibile: verifica se corrisponde l'id O il codice stringa (es. '12')
-                const isBooked = bookings.some(b => b.spot_id === spot.id || b.internal_code === spot.internal_code || (b as any).spot_code === spot.internal_code);
-                
-                let bgClass = "";
-                if (isBooked) {
-                  bgClass = "bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30";
-                } else if (!spot.is_available) {
-                  bgClass = "bg-amber-500/10 border-amber-500/40 text-amber-500 hover:bg-amber-500/20";
-                } else {
-                  bgClass = "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20";
-                }
+            {/* Contenitore responsive con scrollbar orizzontale se lo schermo è piccolo */}
+            <div className="w-full overflow-x-auto pb-2">
+              <div className="flex flex-col gap-2 w-[920px] mx-auto pl-1">
+                {rows.map((row, rowIndex) => (
+                  <div key={rowIndex} className="flex items-center justify-start gap-3">
+                    
+                    {/* Settore Sinistro */}
+                    <div className="w-[410px] grid grid-cols-10 gap-1 justify-items-start">
+                      {row.startL ? (
+                        <>
+                          {Array.from({ length: 10 - (row.endL! - row.startL! + 1) }).map((_, i) => (
+                            <div key={`empty-l-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />
+                          ))}
+                          {Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderAdminSpot)}
+                        </>
+                      ) : (
+                        Array.from({ length: 10 }).map((_, i) => <div key={`blank-l-${i}`} className="w-9 h-11" />)
+                      )}
+                    </div>
+                    
+                    {/* Corridoio Centrale */}
+                    <div className="w-10 shrink-0 h-8 flex justify-center items-center font-black text-amber-500 uppercase text-[9px] tracking-wider bg-slate-950 rounded-lg border border-slate-800 shadow-inner">
+                      {row.center || "•"}
+                    </div>
+                    
+                    {/* Settore Destro */}
+                    <div className="w-[410px] grid grid-cols-10 gap-1 justify-items-start">
+                      {row.startR ? (
+                        <>
+                          {Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderAdminSpot)}
+                          {Array.from({ length: 10 - (row.endR! - row.startR! + 1) }).map((_, i) => (
+                            <div key={`empty-r-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />
+                          ))}
+                        </>
+                      ) : (
+                        Array.from({ length: 10 }).map((_, i) => <div key={`blank-r-${i}`} className="w-9 h-11" />)
+                      )}
+                    </div>
 
-                return (
-                  <button
-                    key={spot.id}
-                    onClick={() => setSelectedSpot(spot)}
-                    className={`aspect-square border rounded-xl flex flex-col items-center justify-center gap-1 font-semibold text-sm transition shadow-sm ${bgClass}`}
-                  >
-                    <span className="text-xs opacity-60">N°</span>
-                    <span className="text-base font-bold">{spot.internal_code}</span>
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      isBooked ? 'bg-red-500' : !spot.is_available ? 'bg-amber-500' : 'bg-emerald-500'
-                    }`} />
-                  </button>
-                );
-              })}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* LEGENDA RAPIDA */}
+            <div className="flex gap-4 text-xs pt-2 border-t border-slate-800/60 justify-center">
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Libero / Online</div>
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Bloccato Manuale</div>
+              <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Prenotato Cliente</div>
             </div>
           </div>
 
@@ -255,11 +321,11 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between">
                     <span className="text-2xl font-black text-white">Ombrellone {selectedSpot.internal_code}</span>
                     <span className={`px-2 py-1 text-xs rounded-md font-bold uppercase tracking-wider ${
-                      bookings.some(b => b.spot_id === selectedSpot.id || b.internal_code === selectedSpot.internal_code)
+                      bookings.some(b => b.spot_id === selectedSpot.id || b.internal_code === selectedSpot.internal_code || (b.booking_category && parseInt(b.booking_category.split('|')[0]) === parseInt(selectedSpot.internal_code)))
                         ? 'bg-red-500/20 text-red-400'
                         : selectedSpot.is_available ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
                     }`}>
-                      {bookings.some(b => b.spot_id === selectedSpot.id || b.internal_code === selectedSpot.internal_code)
+                      {bookings.some(b => b.spot_id === selectedSpot.id || b.internal_code === selectedSpot.internal_code || (b.booking_category && parseInt(b.booking_category.split('|')[0]) === parseInt(selectedSpot.internal_code)))
                         ? 'Occupato Oggi'
                         : selectedSpot.is_available ? 'In Vendita Online' : 'Bloccato / Privato'}
                     </span>
@@ -274,7 +340,7 @@ export default function AdminDashboard() {
                 <div className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-xl">
                   <h4 className="text-sm font-semibold text-slate-300">Azioni Rapide</h4>
                   
-                  {bookings.some(b => b.spot_id === selectedSpot.id || b.internal_code === selectedSpot.internal_code) ? (
+                  {bookings.some(b => b.spot_id === selectedSpot.id || b.internal_code === selectedSpot.internal_code || (b.booking_category && parseInt(b.booking_category.split('|')[0]) === parseInt(selectedSpot.internal_code))) ? (
                     <p className="text-xs text-red-400 text-center py-2 bg-red-950/20 rounded-lg border border-red-900/30">
                       Questo ombrellone è occupato da un cliente per la giornata di oggi. Gestisci lo stato dal registro prenotazioni.
                     </p>
