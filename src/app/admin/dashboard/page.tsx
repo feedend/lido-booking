@@ -82,7 +82,6 @@ export default function AdminDashboard() {
     checkUser();
   }, [router]);
 
-  // Funzione per Aprire/Chiudere manualmente un ombrellone
   const handleToggleSpot = async (spot: Spot) => {
     const updatedAvailability = !spot.is_available;
     
@@ -97,9 +96,10 @@ export default function AdminDashboard() {
     if (error) {
       alert("Errore durante l'aggiornamento dell'ombrellone");
     } else {
+      // Aspettiamo che i dati siano aggiornati nello stato prima di resettare
+      await fetchData(); 
       setSelectedSpot(null);
       setNoteBlock('');
-      fetchData(); // Ricarica la griglia aggiornata
     }
   };
 
