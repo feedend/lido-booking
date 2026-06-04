@@ -43,24 +43,21 @@ export default function AdminDashboard() {
   const [noteBlock, setNoteBlock] = useState('');
   const router = useRouter();
 
-  // Carica i dati iniziali dal Database
+// Carica i dati iniziali dal Database (Versione pulita per evitare il 400)
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Recupera gli ombrelloni ordinati per codice interno
+      // 1. Recupera TUTTI gli ombrelloni senza filtri aggressivi
       const { data: spotsData, error: spotsError } = await supabase
         .from('spots')
-        .select('*')
-        .eq('is_active', true) // Mostra solo quelli attivi
-        .order('internal_code');
+        .select('*');
 
       if (spotsError) throw spotsError;
 
       // 2. Recupera le prenotazioni attive
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
-        .select('*')
-        .eq('status', 'confirmed');
+        .select('*');
 
       if (bookingsError) throw bookingsError;
 
