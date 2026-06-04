@@ -44,7 +44,7 @@ export default function AdminDashboard() {
   const [noteBlock, setNoteBlock] = useState('');
   const router = useRouter();
 
-  // Carica i dati iniziali dal Database
+ // Carica i dati iniziali dal Database (Dashboard Admin)
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -73,9 +73,11 @@ export default function AdminDashboard() {
         return bDate === todayStr;
       });
 
-      // ORDINAMENTO SICURO (Evita il crash se ci sono codici non numerici)
+      // ORDINAMENTO SICURO (Previene crash se ci sono codici strani o vuoti)
       const sortedSpots = (spotsData || []).sort((a, b) => {
-        return (a.internal_code || '').localeCompare(b.internal_code || '', undefined, {
+        const codeA = a.internal_code ? a.internal_code.toString() : '';
+        const codeB = b.internal_code ? b.internal_code.toString() : '';
+        return codeA.localeCompare(codeB, undefined, {
           numeric: true,
           sensitivity: 'base'
         });
@@ -84,7 +86,7 @@ export default function AdminDashboard() {
       setSpots(sortedSpots);
       setBookings(todaysBookings);
     } catch (err) {
-      console.error('Errore nel caricamento dati:', err);
+      console.error('Errore nel caricamento dati in Dashboard:', err);
     } finally {
       setLoading(false);
     }
