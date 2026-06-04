@@ -43,18 +43,27 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
   const [noteBlock, setNoteBlock] = useState('');
+  const [dbError, setDbError] = useState<string | null>(null);
   const router = useRouter();
 
   // Carica i dati iniziali dal Database (Dashboard Admin)
   const fetchData = async () => {
     setLoading(true);
+    setDbError(null);
     try {
+      console.log("Tentativo di recupero ombrelloni da Supabase...");
+      
       // 1. Recupera tutti gli ombrelloni
       const { data: spotsData, error: spotsError } = await supabase
         .from('spots')
         .select('*');
 
-      if (spotsError) throw spotsError;
+      if (spotsError) {
+        console.error("Errore Supabase Spots:", spotsError);
+        throw spotsError;
+      }
+
+      console.log(`Recuperati ${spotsData?.length || 0} ombrelloni dal DB.`);
 
       // 2. Recupera le prenotazioni confermate
       const { data: bookingsData, error: bookingsError } = await supabase
@@ -64,20 +73,46 @@ export default function AdminDashboard() {
 
       if (bookingsError) throw bookingsError;
 
-      // Sincronizza la data odierna (formato YYYY-MM-DD locale)
       const todayStr = new Date().toISOString().split('T')[0];
-
-      // Filtra le prenotazioni per mostrare solo quelle valide per OGGI
       const todaysBookings = (bookingsData || []).filter(b => {
         if (!b.booking_date) return false;
         const bDate = b.booking_date.split('T')[0];
         return bDate === todayStr;
       });
 
-      setSpots(spotsData || []);
+      // SE IL DATABASE È VUOTO O AGGIREBBE DA BLOCCO RLS, GENERIAMO I COMPONENTI DI FALLBACK
+      if (!spotsData || spotsData.length === 0) {
+        console.warn("Nessun dato ricevuto da 'spots'. Generazione mappa locale di emergenza...");
+        setDbError("Nessun record trovato in 'spots'. Mostro mappa locale generata automaticamente.");
+        
+        const fallbackSpots: Spot[] = Array.from({ length: 174 }, (_, i) => ({
+          id: `fallback-${i + 1}`,
+          internal_code: (i + 1).toString(),
+          is_available: true,
+          is_active: true,
+          notes: null,
+          zone_id: 'default'
+        }));
+        setSpots(fallbackSpots);
+      } else {
+        setSpots(spotsData);
+      }
+
       setBookings(todaysBookings);
-    } catch (err) {
-      console.error('Errore nel caricamento dati in Dashboard:', err);
+    } catch (err: any) {
+      console.error('Errore critico nel caricamento dati:', err);
+      setDbError(err.message || "Errore di connessione a Supabase (Controlla RLS o Tabelle)");
+      
+      // Fallback totale anche in caso di crash/blocco di rete
+      const fallbackSpots: Spot[] = Array.from({ length: 174 }, (_, i) => ({
+        id: `fallback-${i + 1}`,
+        internal_code: (i + 1).toString(),
+        is_available: true,
+        is_active: true,
+        notes: null,
+        zone_id: 'default'
+      }));
+      setSpots(fallbackSpots);
     } finally {
       setLoading(false);
     }
@@ -96,8 +131,13 @@ export default function AdminDashboard() {
   }, [router]);
 
   const handleToggleSpot = async (spot: Spot) => {
+    // Impedisce il salvataggio se siamo in modalità fallback locale
+    if (spot.id.startsWith('fallback-')) {
+      alert("Impossibile modificare: la mappa è in modalità Fallback Locale perché il database non risponde.");
+      return;
+    }
+
     const updatedAvailability = !spot.is_available;
-    
     const { error } = await supabase
       .from('spots')
       .update({ 
@@ -124,7 +164,7 @@ export default function AdminDashboard() {
   const closedSpots = spots.filter(s => !s.is_available).length;
   const activeBookingsCount = bookings.length;
 
-  // MATRICE GEOMETRICA REALE DELLA SPIAGGIA (Sincronizzata con il Client)
+  // MATRICE GEOMETRICA REALE DELLA SPIAGGIA
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
@@ -140,11 +180,9 @@ export default function AdminDashboard() {
   ];
 
   const renderAdminSpot = (num: number) => {
-    // Trova l'oggetto spot corrispondente nel database
     const spot = spots.find(s => parseInt(s.internal_code) === num);
-    if (!spot) return <div key={`missing-${num}`} className="w-10 h-10 bg-slate-900 border border-dashed border-slate-800 rounded opacity-40 shrink-0" />;
+    if (!spot) return <div key={`missing-${num}`} className="w-9 h-11 bg-slate-900/40 border border-dashed border-slate-800 rounded opacity-20 shrink-0" />;
 
-    // Controllo flessibile e blindato per verificare se è prenotato oggi
     const isBooked = bookings.some(b => 
       b.spot_id === spot.id || 
       b.internal_code === spot.internal_code || 
@@ -217,6 +255,15 @@ export default function AdminDashboard() {
       </nav>
 
       <main className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
+
+        {/* MESSAGGIO DI ALLERTA SE SUPABASE DOVESSE FALLIRE */}
+        {dbError && (
+          <div className="bg-amber-950/40 border border-amber-900/60 text-amber-400 p-4 rounded-xl text-xs space-y-1">
+            <p className="font-bold flex items-center gap-2">⚠️ Avviso Diagnostica Database:</p>
+            <p className="opacity-90">{dbError}</p>
+            <p className="opacity-60 text-[10px]">Controlla la console di ispezione del browser per visualizzare l'errore completo o verificare le policy RLS.</p>
+          </div>
+        )}
         
         {/* STATS CARDS */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -246,7 +293,7 @@ export default function AdminDashboard() {
         {/* CONTENUTO PRINCIPALE */}
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
           
-          {/* MAPPA REALE DELLA SPIAGGIA LATO ADMIN */}
+          {/* MAPPA PLANIMETRICA */}
           <div className="xl:col-span-3 bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-4 overflow-hidden">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h2 className="text-base font-bold text-white flex items-center gap-2">
@@ -257,7 +304,6 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            {/* Contenitore responsive con scrollbar orizzontale se lo schermo è piccolo */}
             <div className="w-full overflow-x-auto pb-2">
               <div className="flex flex-col gap-2 w-[920px] mx-auto pl-1">
                 {rows.map((row, rowIndex) => (
@@ -301,7 +347,6 @@ export default function AdminDashboard() {
               </div>
             </div>
             
-            {/* LEGENDA RAPIDA */}
             <div className="flex gap-4 text-xs pt-2 border-t border-slate-800/60 justify-center">
               <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Libero / Online</div>
               <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Bloccato Manuale</div>
@@ -330,45 +375,16 @@ export default function AdminDashboard() {
                         : selectedSpot.is_available ? 'In Vendita Online' : 'Bloccato / Privato'}
                     </span>
                   </div>
-                  {selectedSpot.notes && (
-                    <p className="mt-2 text-xs bg-slate-950 p-2 border border-slate-800 rounded-md text-amber-400">
-                      <strong>Nota admin:</strong> {selectedSpot.notes}
-                    </p>
-                  )}
                 </div>
 
                 <div className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-xl">
                   <h4 className="text-sm font-semibold text-slate-300">Azioni Rapide</h4>
-                  
-                  {bookings.some(b => b.spot_id === selectedSpot.id || b.internal_code === selectedSpot.internal_code || (b.booking_category && parseInt(b.booking_category.split('|')[0]) === parseInt(selectedSpot.internal_code))) ? (
-                    <p className="text-xs text-red-400 text-center py-2 bg-red-950/20 rounded-lg border border-red-900/30">
-                      Questo ombrellone è occupato da un cliente per la giornata di oggi. Gestisci lo stato dal registro prenotazioni.
-                    </p>
-                  ) : selectedSpot.is_available ? (
-                    <div className="space-y-2">
-                      <label className="text-xs text-slate-400">Motivo del blocco (opzionale):</label>
-                      <input 
-                        type="text" 
-                        placeholder="Es. Manutenzione, riservato..."
-                        value={noteBlock}
-                        onChange={(e) => setNoteBlock(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
-                      <button
-                        onClick={() => handleToggleSpot(selectedSpot)}
-                        className="w-full bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2 rounded-lg flex items-center justify-center gap-2 transition"
-                      >
-                        <XCircle className="h-4 w-4" /> Chiudi/Ritiro dalla vendita
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleToggleSpot(selectedSpot)}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 rounded-lg flex items-center justify-center gap-2 transition"
-                    >
-                      <CheckCircle className="h-4 w-4" /> Riapri ed Estendi online
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleToggleSpot(selectedSpot)}
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2 rounded-lg flex items-center justify-center gap-2 transition"
+                  >
+                    <XCircle className="h-4 w-4" /> Cambia Stato
+                  </button>
                 </div>
               </div>
             ) : (
