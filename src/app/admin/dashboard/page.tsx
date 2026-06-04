@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Layers, 
   CheckCircle, 
+  XCircle, 
   FileText, 
   LogOut, 
   RefreshCw, 
@@ -46,12 +47,14 @@ export default function AdminDashboard() {
   const [dbError, setDbError] = useState<string | null>(null);
   const router = useRouter();
 
-  // Genera la mappa standard 1-174 come base solida
+  const [mappedSpotIds, setMappedSpotIds] = useState<Set<string>>(new Set());
+
+  // Genera sempre la mappa 1-174 come base solida di fallback
   const generateFallback = useCallback((existingSpots: Spot[] = []) => {
     const fallbackSpots: Spot[] = Array.from({ length: 174 }, (_, i) => {
       const codeStr = (i + 1).toString();
+      // Se nel DB esiste già lo spot, usa quello, altrimenti crealo in locale
       const found = existingSpots.find(s => s.internal_code?.toString().trim() === codeStr);
-      
       return found || {
         id: `fallback-${codeStr}`,
         internal_code: codeStr,
@@ -62,10 +65,13 @@ export default function AdminDashboard() {
       };
     });
 
-    // Mantiene lo spot testuale "Bagnino" se presente nel DB
-    const bagninoSpot = existingSpots.filter(s => s.internal_code?.toString().trim().toLowerCase() === 'bagnino');
+    // Aggiunge eventuali spot testuali o speciali già caricati (es. Bagnino, serie 900)
+    const specialSpots = existingSpots.filter(s => {
+      const num = parseInt(s.internal_code);
+      return isNaN(num) || num < 1 || num > 174;
+    });
 
-    setSpots([...fallbackSpots, ...bagninoSpot]);
+    setSpots([...fallbackSpots, ...specialSpots]);
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -79,7 +85,7 @@ export default function AdminDashboard() {
     setDbError(null);
     
     try {
-      // 1. Recupero Prenotazioni
+      // 1. Recupero Prenotazioni (Sappiamo che funziona!)
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select('*')
@@ -102,6 +108,7 @@ export default function AdminDashboard() {
       if (spotsError) throw spotsError;
 
       if (!spotsData || spotsData.length === 0) {
+        // RLS attiva o tabella vuota: Forza la generazione visiva
         setDbError("Nessun dato letto da 'spots' (Verifica le policy RLS su Supabase). Mappa forzata attiva.");
         generateFallback([]);
       } else {
@@ -135,6 +142,17 @@ export default function AdminDashboard() {
     return () => { isMounted = false; };
   }, [router, fetchData]);
 
+  useEffect(() => {
+    const mapped = new Set<string>();
+    spots.forEach(spot => {
+      const codeNum = parseInt(spot.internal_code);
+      if (!isNaN(codeNum) && codeNum >= 1 && codeNum <= 174 && !spot.id.startsWith('fallback-')) {
+        mapped.add(spot.id);
+      }
+    });
+    setMappedSpotIds(mapped);
+  }, [spots]);
+
   const handleToggleSpot = async (spot: Spot) => {
     if (!supabase || spot.id.startsWith('fallback-')) {
       alert("Attenzione: sblocca le policy RLS su Supabase per salvare le modifiche nel database.");
@@ -157,13 +175,12 @@ export default function AdminDashboard() {
     }
   };
 
-  // Matrice planimetrica standard (1 - 174) ripristinata al 100%
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
     { startL: 41, endL: 50, startR: 51, endR: 60, center: "" },
     { startL: 61, endL: 70, startR: 71, endR: 80, center: "P" },
-    { startL: 81, endL: 90, startR: 91, endR: 100, center: "a" }, 
+    { startL: 81, endL: 90, startR: 91, endR: 100, center: "a" },
     { startL: 101, endL: 110, startR: 111, endR: 120, center: "s" },
     { startL: 121, endL: 129, startR: 130, endR: 139, center: "s" },
     { startL: 140, endL: 146, startR: 147, endR: 154, center: "e" },
@@ -174,7 +191,8 @@ export default function AdminDashboard() {
 
   const renderSpotButton = (spot: Spot) => {
     const spotCodeClean = spot.internal_code?.toString().trim().toLowerCase();
-
+    
+    // Controllo incrociato: abbinamento prenotazione tramite ID dello spot oppure tramite codice (es. "99")
     const isBooked = bookings.some(b => {
       return b.spot_id === spot.id || (b.internal_code?.toString().trim().toLowerCase() === spotCodeClean);
     });
@@ -210,6 +228,7 @@ export default function AdminDashboard() {
 
   const renderAdminSpotByNum = (num: number) => {
     const targetStr = num.toString();
+    // Cerca prima lo spot reale dal DB, altrimenti prende il segnaposto locale
     const spot = spots.find(s => s.internal_code?.toString().trim() === targetStr && !s.id.startsWith('fallback-'))
                  || spots.find(s => s.internal_code?.toString().trim() === targetStr);
 
@@ -222,23 +241,20 @@ export default function AdminDashboard() {
     return specialSpot ? renderSpotButton(specialSpot) : <span className="text-slate-500 select-none">{centerLabel}</span>;
   };
 
-  // Vengono contati solo gli ombrelloni reali presenti nella griglia 1-174 + Bagnino
-  const totalSpots = spots.filter(s => {
-    const num = parseInt(s.internal_code, 10);
-    return (num >= 1 && num <= 174) || s.internal_code?.toString().trim().toLowerCase() === 'bagnino';
-  }).length;
+  const extraSpots = spots.filter(s => {
+    if (s.id.startsWith('fallback-')) return false;
+    const codeStr = s.internal_code?.toString().trim() || '';
+    if (codeStr.toLowerCase() === 'bagnino') return false;
+    return !mappedSpotIds.has(s.id);
+  });
 
-  const closedSpots = spots.filter(s => {
-    const num = parseInt(s.internal_code, 10);
-    const isStandard = (num >= 1 && num <= 174) || s.internal_code?.toString().trim().toLowerCase() === 'bagnino';
-    const isNotAvailable = !(s.is_available === true || s.is_available === 'TRUE' || s.is_available === 'true');
-    return isStandard && isNotAvailable;
-  }).length;
+  const totalSpots = spots.filter(s => !s.id.startsWith('fallback-')).length;
+  const closedSpots = spots.filter(s => !s.id.startsWith('fallback-') && !(s.is_available === true || s.is_available === 'TRUE' || s.is_available === 'true')).length;
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white text-sm">
-        <RefreshCw className="animate-spin mr-2 h-5 w-5 text-blue-500" /> Sincronizzazione della spiaggia...
+        <RefreshCw className="animate-spin mr-2 h-5 w-5 text-blue-500" /> Caricamento Lido...
       </div>
     );
   }
@@ -267,7 +283,7 @@ export default function AdminDashboard() {
         
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-            <p className="text-xs text-slate-400">Ombrelloni Totali (1-174)</p>
+            <p className="text-xs text-slate-400">Ombrelloni Database</p>
             <h3 className="text-xl font-bold mt-0.5">{totalSpots}</h3>
           </div>
           <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
@@ -311,6 +327,13 @@ export default function AdminDashboard() {
                 </div>
               </div>
             </div>
+
+            {extraSpots.length > 0 && (
+              <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3">
+                <h3 className="text-xs font-bold text-amber-500">Postazioni Speciali Rilevate (Serie 900+)</h3>
+                <div className="flex flex-wrap gap-2">{extraSpots.map(spot => <div key={spot.id}>{renderSpotButton(spot)}</div>)}</div>
+              </div>
+            )}
           </div>
 
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl h-fit">
