@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { 
@@ -14,16 +14,19 @@ import {
   Umbrella
 } from 'lucide-react';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// Inizializzazione protetta contro stringhe vuote o indefinite
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+const supabase = supabaseUrl && supabaseAnonKey 
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 interface Spot {
   id: string;
   internal_code: string;
-  is_available: boolean | string;
-  is_active: boolean | string;
+  is_available: boolean | string | null;
+  is_active: boolean | string | null;
   notes: string | null;
   zone_id: string;
 }
@@ -46,19 +49,40 @@ export default function AdminDashboard() {
   const [dbError, setDbError] = useState<string | null>(null);
   const router = useRouter();
 
-  // Tracciamento degli ombrelloni della griglia standard usati, per isolare quelli speciali (es. serie 900)
-  const [mappedSpotIds, setMappedSpotIds] = useState<Set<string>>(new Set());
+  // Generatore di emergenza locale se Supabase è offline o vuoto
+  const generateFallback = useCallback(() => {
+    const fallbackSpots: Spot[] = Array.from({ length: 174 }, (_, i) => ({
+      id: `fallback-${i + 1}`,
+      internal_code: (i + 1).toString(),
+      is_available: true,
+      is_active: true,
+      notes: null,
+      zone_id: 'default-zone'
+    }));
+    setSpots(fallbackSpots);
+  }, []);
 
-  const fetchData = async () => {
+  // Caricamento Dati isolato con useCallback per evitare loop nel rendering
+  const fetchData = useCallback(async () => {
+    if (!supabase) {
+      setDbError("Chiavi di Supabase non configurate nel file .env.local o non lette correttamente.");
+      generateFallback();
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setDbError(null);
+    
     try {
+      // 1. Recupero spot
       const { data: spotsData, error: spotsError } = await supabase
         .from('spots')
         .select('*');
 
       if (spotsError) throw spotsError;
 
+      // 2. Recupero prenotazioni
       const { data: bookingsData, error: bookingsError } = await supabase
         .from('bookings')
         .select('*')
@@ -69,77 +93,64 @@ export default function AdminDashboard() {
       const todayStr = new Date().toISOString().split('T')[0];
       const todaysBookings = (bookingsData || []).filter(b => {
         if (!b.booking_date) return false;
-        const bDate = b.booking_date.split('T')[0];
-        return bDate === todayStr;
+        return b.booking_date.split('T')[0] === todayStr;
       });
 
       if (!spotsData || spotsData.length === 0) {
-        setDbError("La tabella 'spots' è vuota su Supabase. Caricamento mappa locale.");
+        setDbError("La tabella 'spots' ha risposto senza record. Mostro mappa locale temporanea.");
         generateFallback();
       } else {
         setSpots(spotsData);
       }
-
       setBookings(todaysBookings);
+
     } catch (err: any) {
-      console.error('Errore caricamento dati:', err);
-      setDbError(err.message || "Errore di comunicazione con Supabase.");
+      console.error('Errore durante il fetch dei dati:', err);
+      setDbError(err.message || "Impossibile connettersi al database.");
       generateFallback();
     } finally {
       setLoading(false);
     }
-  };
+  }, [generateFallback]);
 
-  const generateFallback = () => {
-    const fallbackSpots: Spot[] = Array.from({ length: 174 }, (_, i) => ({
-      id: `fallback-${i + 1}`,
-      internal_code: (i + 1).toString(),
-      is_available: true,
-      is_active: true,
-      notes: null,
-      zone_id: 'default-zone'
-    }));
-    setSpots(fallbackSpots);
-  };
-
+  // Controllo sessione utente all'avvio
   useEffect(() => {
+    let isMounted = true;
+
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/admin/login');
-      } else {
-        fetchData();
+      if (!supabase) {
+        if (isMounted) fetchData();
+        return;
+      }
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session && isMounted) {
+          router.push('/admin/login');
+        } else if (isMounted) {
+          fetchData();
+        }
+      } catch (e) {
+        console.error("Errore autenticazione:", e);
+        if (isMounted) fetchData();
       }
     };
-    checkUser();
-  }, [router]);
 
-  // Aggiorna l'elenco degli ID mappati nella griglia principale per calcolare i fuori serie
-  useEffect(() => {
-    const mapped = new Set<string>();
-    
-    // Scansiona tutta la matrice geometrica per vedere quali spot reali ha catturato
-    spots.forEach(spot => {
-      const codeStr = spot.internal_code?.trim();
-      const codeNum = parseInt(codeStr);
-      
-      // Se è un numero tra 1 e 174, viene catturato dalla mappa principale
-      if (!isNaN(codeNum) && codeNum >= 1 && codeNum <= 174) {
-        mapped.add(spot.id);
-      }
-    });
-    
-    setMappedSpotIds(mapped);
-  }, [spots]);
+    checkUser();
+    return () => { isMounted = false; };
+  }, [router, fetchData]);
 
   const handleToggleSpot = async (spot: Spot) => {
-    if (spot.id.startsWith('fallback-')) {
-      alert("Azione non consentita in modalità provvisoria locale.");
+    if (!supabase || spot.id.startsWith('fallback-')) {
+      alert("Azione non disponibile in modalità provvisoria locale.");
       return;
     }
 
-    const currentStatus = spot.is_available === true || spot.is_available === 'TRUE' || spot.is_available === 'true';
-    const updatedAvailability = !currentStatus;
+    // Lettura sicura dello stato booleano (gestisce sia booleani puri che stringhe "TRUE"/"false")
+    const isAvailableNow = spot.is_available === true || 
+                          spot.is_available === 'TRUE' || 
+                          spot.is_available === 'true';
+    
+    const updatedAvailability = !isAvailableNow;
 
     const { error } = await supabase
       .from('spots')
@@ -150,7 +161,7 @@ export default function AdminDashboard() {
       .eq('id', spot.id);
 
     if (error) {
-      alert("Errore durante l'aggiornamento dell'ombrellone");
+      alert("Errore durante l'aggiornamento dello stato dell'ombrellone.");
     } else {
       await fetchData(); 
       setSelectedSpot(null);
@@ -158,7 +169,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // STRUTTURA DELLE RIGHE STANDARD
+  // MATRICE PLANIMETRICA DEL LIDO (1 - 174)
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
@@ -173,28 +184,30 @@ export default function AdminDashboard() {
     { startL: null, endL: null, startR: 172, endR: 174, center: "" },
   ];
 
-  // RENDERIZZATORE COMPONENTE OMBRELLONE (SICURO CONTRO STRINGHE/TEXT)
+  // Renderizzatore universale del quadratino dell'ombrellone
   const renderSpotButton = (spot: Spot) => {
-    const isBooked = bookings.some(b => 
-      b.spot_id === spot.id || 
-      b.internal_code === spot.internal_code
-    );
+    // Controllo prenotazione incrociato su ID e codice pulito da spazi
+    const spotCodeClean = spot.internal_code?.toString().trim().toLowerCase();
+    
+    const isBooked = bookings.some(b => {
+      const bSpotId = b.spot_id;
+      const bCodeClean = b.internal_code?.toString().trim().toLowerCase();
+      return bSpotId === spot.id || (bCodeClean && bCodeClean === spotCodeClean);
+    });
 
-    const isAvailable = spot.is_available === true || spot.is_available === 'TRUE' || spot.is_available === 'true';
+    const isAvailable = spot.is_available === true || 
+                        spot.is_available === 'TRUE' || 
+                        spot.is_available === 'true';
 
-    let bgClass = "";
+    let bgClass = "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30";
     if (isBooked) {
       bgClass = "bg-red-500/20 border-red-500/60 text-red-400 hover:bg-red-500/40";
     } else if (!isAvailable) {
       bgClass = "bg-amber-500/20 border-amber-500/60 text-amber-500 hover:bg-amber-500/40";
-    } else {
-      bgClass = "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/30";
     }
 
     const isSelected = selectedSpot?.id === spot.id;
-
-    // Se il testo è lungo (es. "Bagnino"), riduciamo la dimensione del font per non romper l'HTML
-    const isLongText = spot.internal_code.length > 3;
+    const isLongText = spotCodeClean.length > 3;
 
     return (
       <button
@@ -203,7 +216,7 @@ export default function AdminDashboard() {
         className={`w-9 h-11 border rounded-lg flex flex-col items-center justify-center font-bold transition shadow-sm shrink-0 relative
           ${bgClass} ${isSelected ? 'ring-2 ring-blue-500 border-transparent scale-105 z-10' : ''}`}
       >
-        <span className={isLongText ? 'text-[7px] leading-tight text-center px-0.5' : 'text-[10px]'}>
+        <span className={isLongText ? 'text-[7px] leading-tight text-center px-0.5 uppercase' : 'text-[10px]'}>
           {spot.internal_code}
         </span>
         <span className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
@@ -213,75 +226,89 @@ export default function AdminDashboard() {
     );
   };
 
-  // Trova lo spot numerico per la griglia standard
+  // Trova lo spot per numero sulla griglia (con pulizia rigorosa delle stringhe)
   const renderAdminSpotByNum = (num: number) => {
-    const spot = spots.find(s => {
-      const codeStr = s.internal_code?.trim();
-      return codeStr === num.toString();
-    });
+    const targetStr = num.toString();
+    const spot = spots.find(s => s.internal_code?.toString().trim() === targetStr);
 
     if (!spot) {
-      return <div key={`missing-${num}`} className="w-9 h-11 bg-slate-900/40 border border-dashed border-slate-800 rounded opacity-20 shrink-0 flex items-center justify-center text-[9px] text-slate-600">{num}</div>;
+      // Box segnaposto vuoto se il codice non esiste temporaneamente nel DB
+      return (
+        <div key={`missing-${num}`} className="w-9 h-11 bg-slate-900/40 border border-dashed border-slate-800 rounded opacity-20 shrink-0 flex items-center justify-center text-[8px] text-slate-600">
+          {num}
+        </div>
+      );
     }
 
     return renderSpotButton(spot);
   };
 
-  // Trova lo spot testuale speciale per il corridoio centrale (es. "Bagnino")
+  // Gestione del corridoio centrale (es. se trova lo spot con testo "Bagnino")
   const renderCenterSpot = (centerLabel: string) => {
-    if (!centerLabel) return <span className="opacity-30">•</span>;
+    if (!centerLabel || centerLabel.trim() === "") return <span className="opacity-20">•</span>;
 
-    // Cerca se esiste uno spot nel DB che si chiama esattamente come la label (es. "Bagnino")
-    const specialSpot = spots.find(s => s.internal_code?.trim().toLowerCase() === centerLabel.toLowerCase());
+    const specialSpot = spots.find(s => 
+      s.internal_code?.toString().trim().toLowerCase() === centerLabel.trim().toLowerCase()
+    );
 
     if (specialSpot) {
       return renderSpotButton(specialSpot);
     }
 
-    // Altrimenti mostra la classica lettera del corridoio
-    return <span>{centerLabel}</span>;
+    return <span className="text-slate-500 select-none">{centerLabel}</span>;
   };
 
-  // Filtra tutti gli spot esclusi dal computo grafico 1-174 o dalla postazione Bagnino
+  // Calcolo dinamico dei codici fuori griglia (es. la serie 900)
   const extraSpots = spots.filter(s => {
-    const codeStr = s.internal_code?.trim();
-    if (codeStr?.toLowerCase() === 'bagnino') return false;
-    return !mappedSpotIds.has(s.id);
+    const codeStr = s.internal_code?.toString().trim() || '';
+    if (codeStr.toLowerCase() === 'bagnino') return false;
+    
+    const codeNum = parseInt(codeStr, 10);
+    // Se non è un numero o è fuori dal range 1-174, lo mandiamo nei fuori serie
+    return isNaN(codeNum) || codeNum < 1 || codeNum > 174;
   });
 
   const totalSpots = spots.length;
   const closedSpots = spots.filter(s => {
-    const isAvailable = s.is_available === true || s.is_available === 'TRUE' || s.is_available === 'true';
-    return !isAvailable;
+    return !(s.is_available === true || s.is_available === 'TRUE' || s.is_available === 'true');
   }).length;
   const activeBookingsCount = bookings.length;
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white text-sm font-medium">
+        <RefreshCw className="animate-spin mr-2 h-5 w-5 text-blue-500" />
+        Sincronizzazione della spiaggia in corso...
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
       
       {/* NAVBAR */}
       <nav className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="bg-blue-600 p-2 rounded-lg text-white">
-            <Layers className="h-6 w-6" />
+            <Layers className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-white">Lido Control Panel</h1>
-            <p className="text-xs text-slate-400">Gestione Mappa & Disponibilità</p>
+            <h1 className="text-lg font-bold tracking-tight text-white">Lido Control Panel</h1>
+            <p className="text-xs text-slate-400">Pannello Amministrativo</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <button 
             onClick={() => router.push('/admin/prenotazioni')}
-            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-sm px-4 py-2 rounded-lg transition"
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-xs px-3 py-2 rounded-lg transition"
           >
-            <FileText className="h-4 w-4" /> Gestione Prenotazioni
+            <FileText className="h-3.5 w-3.5" /> Prenotazioni
           </button>
           <button 
-            onClick={() => { supabase.auth.signOut(); router.push('/admin/login'); }}
-            className="flex items-center gap-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 text-sm px-4 py-2 rounded-lg border border-red-900/50 transition"
+            onClick={async () => { if(supabase) await supabase.auth.signOut(); router.push('/admin/login'); }}
+            className="flex items-center gap-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs px-3 py-2 rounded-lg border border-red-900/40 transition"
           >
-            <LogOut className="h-4 w-4" /> Esci
+            <LogOut className="h-3.5 w-3.5" /> Esci
           </button>
         </div>
       </nav>
@@ -289,54 +316,54 @@ export default function AdminDashboard() {
       <main className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
 
         {dbError && (
-          <div className="bg-amber-950/40 border border-amber-900/60 text-amber-400 p-4 rounded-xl text-xs">
-            <p className="font-bold">⚠️ Avviso Database: {dbError}</p>
+          <div className="bg-amber-950/30 border border-amber-900/50 text-amber-400 p-3.5 rounded-xl text-xs">
+            <p className="font-semibold flex items-center gap-2">⚠️ Avviso Sistema: {dbError}</p>
           </div>
         )}
         
         {/* STATS CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl flex items-center justify-between">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-slate-400">Ombrelloni nel Database</p>
-              <h3 className="text-2xl font-bold text-white mt-1">{totalSpots}</h3>
+              <p className="text-xs font-medium text-slate-400">Postazioni Totali</p>
+              <h3 className="text-xl font-bold text-white mt-0.5">{totalSpots}</h3>
             </div>
-            <Umbrella className="h-8 w-8 text-slate-600" />
+            <Umbrella className="h-7 w-7 text-slate-700" />
           </div>
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl flex items-center justify-between">
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-slate-400">Prenotati Oggi</p>
-              <h3 className="text-2xl font-bold text-emerald-400 mt-1">{activeBookingsCount}</h3>
+              <p className="text-xs font-medium text-slate-400">Occupati (Oggi)</p>
+              <h3 className="text-xl font-bold text-emerald-400 mt-0.5">{activeBookingsCount}</h3>
             </div>
-            <CheckCircle className="h-8 w-8 text-emerald-600/50" />
+            <CheckCircle className="h-7 w-7 text-emerald-700/40" />
           </div>
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl flex items-center justify-between">
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-slate-400">Bloccati / Chiusi</p>
-              <h3 className="text-2xl font-bold text-amber-500 mt-1">{closedSpots}</h3>
+              <p className="text-xs font-medium text-slate-400">Inaccessibili / Bloccati</p>
+              <h3 className="text-xl font-bold text-amber-500 mt-0.5">{closedSpots}</h3>
             </div>
-            <ShieldAlert className="h-8 w-8 text-amber-600/50" />
+            <ShieldAlert className="h-7 w-7 text-amber-700/40" />
           </div>
         </div>
 
-        {/* CONTENUTO GENERALE MAPPA */}
+        {/* GRIGLIA ED EXTRA */}
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
           
           <div className="xl:col-span-3 space-y-6">
             
-            {/* SPIAGGIA PRINCIPALE */}
+            {/* CORPO MAPPA PRINCIPALE */}
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-4 overflow-hidden">
               <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <Umbrella className="h-4 w-4 text-blue-500" /> Settori Standard (1 - 174)
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Umbrella className="h-4 w-4 text-blue-500" /> Mappa Settore Standard (1 - 174)
                 </h2>
                 <button onClick={fetchData} className="text-slate-400 hover:text-white p-1 transition">
-                  <RefreshCw className="h-4 w-4" />
+                  <RefreshCw className="h-3.5 w-3.5" />
                 </button>
               </div>
 
               <div className="w-full overflow-x-auto pb-2">
-                <div className="flex flex-col gap-2 w-[940px] mx-auto pl-1">
+                <div className="flex flex-col gap-2 w-[950px] mx-auto pl-1">
                   {rows.map((row, rowIndex) => (
                     <div key={rowIndex} className="flex items-center justify-start gap-3">
                       
@@ -354,8 +381,8 @@ export default function AdminDashboard() {
                         )}
                       </div>
                       
-                      {/* Corridoio Centrale (Dinamicizzato se trova lo Spot "Bagnino") */}
-                      <div className="w-11 shrink-0 h-11 flex justify-center items-center font-black text-amber-500 uppercase text-[9px] tracking-wider bg-slate-950 rounded-lg border border-slate-800 shadow-inner overflow-hidden">
+                      {/* Corridoio Centrale */}
+                      <div className="w-12 shrink-0 h-11 flex justify-center items-center font-black text-amber-500 uppercase text-[9px] tracking-wider bg-slate-950 rounded-lg border border-slate-800 shadow-inner overflow-hidden">
                         {renderCenterSpot(row.center)}
                       </div>
                       
@@ -379,13 +406,12 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* SEZIONE DINAMICA PER ALTRI CODICI (Es. Serie 900 dello screenshot) */}
+            {/* SEZIONE DINAMICA EXTRA (Serie 900, ecc.) */}
             {extraSpots.length > 0 && (
               <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl space-y-3">
-                <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-amber-500" /> Postazioni Speciali / Altri Settori (Serie 900+)
+                <h3 className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-amber-500" /> Altri Settori Rilevati (Serie 900+)
                 </h3>
-                <p className="text-xs text-slate-500">Queste postazioni sono presenti nel database ma posizionate fuori dalla griglia standard:</p>
                 <div className="flex flex-wrap gap-2 pt-1">
                   {extraSpots.map(spot => (
                     <div key={spot.id}>
@@ -398,34 +424,36 @@ export default function AdminDashboard() {
 
           </div>
 
-          {/* PANNELLO DI DETTAGLIO */}
-          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl h-fit">
-            <h2 className="text-lg font-bold text-white border-b border-slate-800 pb-4 mb-4">
-              Dettaglio Selezionato
+          {/* PANNELLO LATERALE */}
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-xl h-fit">
+            <h2 className="text-md font-bold text-white border-b border-slate-800 pb-3 mb-4">
+              Ispezione Selezionata
             </h2>
             
             {selectedSpot ? (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xl font-black text-white">Codice: {selectedSpot.internal_code}</span>
-                    <span className="text-xs text-slate-500 truncate block">ID: {selectedSpot.id}</span>
-                  </div>
+                  <h3 className="text-lg font-black text-white uppercase tracking-tight">
+                    Codice: {selectedSpot.internal_code}
+                  </h3>
+                  <span className="text-[10px] text-slate-500 block font-mono truncate mt-1">
+                    ID: {selectedSpot.id}
+                  </span>
                 </div>
 
-                <div className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-xl">
-                  <h4 className="text-sm font-semibold text-slate-300">Azioni Rapide</h4>
+                <div className="space-y-2 bg-slate-950 p-3.5 border border-slate-800 rounded-xl">
+                  <p className="text-xs font-medium text-slate-400 mb-2">Modifica Disponibilità</p>
                   <button
                     onClick={() => handleToggleSpot(selectedSpot)}
-                    className="w-full bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2 rounded-lg flex items-center justify-center gap-2 transition"
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold py-2 rounded-lg flex items-center justify-center gap-1.5 transition"
                   >
-                    <XCircle className="h-4 w-4" /> Inverti Disponibilità
+                    <XCircle className="h-3.5 w-3.5" /> Inverti Stato Vendita
                   </button>
                 </div>
               </div>
             ) : (
-              <p className="text-slate-500 text-sm text-center py-12">
-                Seleziona una postazione per modificarne lo stato.
+              <p className="text-slate-500 text-xs text-center py-10">
+                Clicca su un ombrellone della mappa per vederne i dettagli o variarne la disponibilità online.
               </p>
             )}
           </div>
