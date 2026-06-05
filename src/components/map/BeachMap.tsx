@@ -16,9 +16,9 @@ type BeachMapProps = {
     numUtenti: number;
     categoria: string;
     telefono?: string;
-    extraSdraio: number;    // Aggiunto per ricevere i dati dal form aggiornato
-    extraSpiaggine: number;  // Aggiunto per ricevere i dati dal form aggiornato
-    prezzoExtra: number;     // Aggiunto per il supplemento attrezzature
+    extraSdraio: number;    
+    extraSpiaggine: number;  
+    prezzoExtra: number;     
   };
 };
 
