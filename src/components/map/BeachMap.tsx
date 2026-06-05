@@ -15,7 +15,10 @@ type BeachMapProps = {
     email: string;
     numUtenti: number;
     categoria: string;
-    telefono?: string; // Aggiunto per tracciabilità diretta
+    telefono?: string;
+    extraSdraio: number;    // Aggiunto per ricevere i dati dal form aggiornato
+    extraSpiaggine: number;  // Aggiunto per ricevere i dati dal form aggiornato
+    prezzoExtra: number;     // Aggiunto per il supplemento attrezzature
   };
 };
 
@@ -26,7 +29,7 @@ interface DBSpot {
 }
 
 export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
-  const [reservedSpots, setReservedSpots] = useState<string[]>([]); // Gestito tramite ID reali (UUID string)
+  const [reservedSpots, setReservedSpots] = useState<string[]>([]); 
   const [dbSpots, setDbSpots] = useState<DBSpot[]>([]);
   const [selectedSpotNumber, setSelectedSpotNumber] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,17 +41,15 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     const loadBeachData = async () => {
       setIsLoading(true);
       try {
-        // 1. Recupera gli ombrelloni dal database
         const { data: spotsData } = await supabase
           .from('spots')
           .select('id, internal_code, is_available')
-          .eq('is_active', true); // Mostra solo postazioni attive nel layout reale
+          .eq('is_active', true); 
         
         if (spotsData) {
           setDbSpots(spotsData);
         }
 
-        // 2. Recupera le prenotazioni attive del giorno selezionato
         const { data: bookingsData } = await supabase
           .from('bookings')
           .select('spot_id, status, booking_category') 
@@ -56,7 +57,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
           .not('status', 'eq', 'cancelled');
 
         if (bookingsData && spotsData) {
-          // Mapping pulito basato sugli ID relazionali
           const occupatiIds = bookingsData
             .map(b => b.spot_id)
             .filter(id => id !== null) as string[];
@@ -73,7 +73,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     loadBeachData();
   }, [selectedDate]);
 
-  // Calcolo dinamico del prezzo basato sulle tariffe ufficiali
+  // Calcolo dinamico del prezzo basato sulle tariffe ufficiali + supplementi extra
   const calcolaPrezzoTotale = () => {
     const quotaBaseOmbrellone = 2.0;
     let supplementoPersona = 0.0;
@@ -87,12 +87,13 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       supplementoPersona = 3.5;
     }
 
-    return quotaBaseOmbrellone + (userData.numUtenti * supplementoPersona);
+    // Calcolo base dell'ombrellone + persone a cui sommiamo il prezzo dell'attrezzatura extra selezionata
+    const costoBaseEutenti = quotaBaseOmbrellone + (userData.numUtenti * supplementoPersona);
+    return costoBaseEutenti + (userData.prezzoExtra || 0);
   };
 
   const prezzoFinale = calcolaPrezzoTotale();
 
-  // Processo di pagamento e salvataggio relazionale su Supabase
   const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
     
@@ -100,7 +101,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     setIsSubmitting(true);
 
     try {
-      // Ottieni l'ID reale della postazione partendo dal numero selezionato in mappa
       const matchingSpot = dbSpots.find(s => parseInt(s.internal_code) === selectedSpotNumber);
       if (!matchingSpot) {
         alert("Errore nella configurazione della postazione.");
@@ -109,7 +109,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      // 1. Controllo anti-duplicati basato sulla mail inserita nel form per questa data
       const { data: existingBookings, error: fetchError } = await supabase
         .from('bookings')
         .select('guest_email, booking_category')
@@ -124,7 +123,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       }
 
       const haGiaPrenotato = existingBookings?.some(b => {
-        // Controllo moderno sulla colonna della mail diretta della prenotazione
         return b.guest_email?.toLowerCase() === userData.email.toLowerCase();
       });
 
@@ -140,31 +138,30 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       await new Promise((resolve) => setTimeout(resolve, 3000));
       setPaymentProcessing(false); 
 
-      // 2. Inserimento dei dati anagrafici DIRETTAMENTE nella riga della prenotazione
-      // user_id rimane NULL eliminando l'errore della Foreign Key violata
       const { error } = await supabase
         .from('bookings')
         .insert([
           {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
-            spot_id: matchingSpot.id,               // ID Relazionale corretto (UUID)
-            user_id: null,                          // Sganciato dall'autenticazione obbligatoria
-            total_price: prezzoFinale,              // Prezzo decimale puro
-            booking_category: userData.categoria,   // Categoria tariffaria
+            spot_id: matchingSpot.id,               
+            user_id: null,                          
+            total_price: prezzoFinale,              
+            booking_category: userData.categoria,   
             status: 'confirmed',
-            // Nuove colonne per raccogliere l'anagrafica al volo
             guest_first_name: userData.nome,
             guest_last_name: userData.cognome,
             guest_email: userData.email,
             guest_phone: userData.telefono || null
+            // Nota: Se hai aggiunto le colonne degli extra a DB puoi decommentarle qui sotto:
+            // extra_sdraio: userData.extraSdraio,
+            // extra_spiaggine: userData.extraSpiaggine
           }
         ]);
 
       if (error) {
         alert("Errore durante il salvataggio a database: " + error.message);
       } else {
-        // Invio email di conferma transazione tramite API route interna
         try {
           await fetch('/api/send-email', {
             method: 'POST',
@@ -177,7 +174,11 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
               ombrellone: selectedSpotNumber,
               prezzo: prezzoFinale.toFixed(2),
               utenti: userData.numUtenti,
-              categoria: userData.categoria
+              categoria: userData.categoria,
+              // Passiamo le informazioni extra all'email per la ricevuta completa
+              extraSdraio: userData.extraSdraio,
+              extraSpiaggine: userData.extraSpiaggine,
+              prezzoExtra: userData.prezzoExtra
             }),
           });
         } catch (emailErr) {
@@ -216,13 +217,10 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   const renderSpot = (num: number) => {
     const correspondingDbSpot = dbSpots.find(s => parseInt(s.internal_code) === num);
     
-    // Se l'ombrellone non esiste sul database, nascondilo o rendilo non cliccabile
     if (!correspondingDbSpot) return <div key={num} className="w-11 h-14 opacity-10 pointer-events-none" />;
 
     const isDbReserved = reservedSpots.includes(correspondingDbSpot.id);
-    // Controllo se l'admin ha impostato "is_available = false" (Blocco manuale ad oltranza)
     const isDeactivatedByAdmin = correspondingDbSpot.is_available === false;
-    
     const isReserved = isDbReserved || isDeactivatedByAdmin;
 
     return (
@@ -230,11 +228,11 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         key={num}
         onClick={() => !isReserved && setSelectedSpotNumber(num)}
         className={`relative w-11 h-14 flex flex-col items-center justify-center transition-all duration-150 select-none shrink-0
-          ${isReserved ? 'text-gray-400 cursor-not-allowed' : 'text-orange-600 hover:scale-110 cursor-pointer'}`}
+          ${isReserved ? 'text-gray-400 cursor-not-allowed' : 'text-sky-800 hover:scale-110 cursor-pointer'}`}
       >
         <svg 
           viewBox="0 0 24 24" 
-          className={`w-9 h-9 drop-shadow-sm transition-colors ${isReserved ? 'fill-gray-300' : 'fill-orange-500 hover:fill-orange-600'}`}
+          className={`w-9 h-9 drop-shadow-sm transition-colors ${isReserved ? 'fill-gray-300' : 'fill-sky-400 hover:fill-sky-500'}`}
         >
           <path d="M12 2C6.48 2 2 6.48 2 12h20c0-5.52-4.48-10-10-10z" />
           <path d="M12 2v10M7 4.5L12 12M17 4.5L12 12" stroke="white" strokeWidth="0.5" strokeLinecap="round" />
@@ -242,7 +240,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         </svg>
 
         <span className={`text-[9px] font-black mt-0.5 px-1 rounded bg-white/90 shadow-sm border
-          ${isReserved ? 'text-gray-400 border-gray-200' : 'text-orange-950 border-orange-100'}`}>
+          ${isReserved ? 'text-gray-400 border-gray-200' : 'text-sky-950 border-sky-100'}`}>
           {num}
         </span>
 
@@ -258,15 +256,15 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl shadow-md max-w-sm mx-auto">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500 mb-4"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-sky-500 mb-4"></div>
         <p className="text-sm font-semibold text-slate-600">Sincronizzazione spiaggia...</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto bg-amber-50/40 p-4 sm:p-6 rounded-3xl shadow-xl border border-orange-100/70 relative">
-      <div className="block md:hidden text-center text-[10px] text-orange-800/70 font-bold uppercase tracking-wider mb-2 animate-pulse">
+    <div className="w-full max-w-5xl mx-auto bg-amber-50/40 p-4 sm:p-6 rounded-3xl shadow-xl border border-sky-100/70 relative">
+      <div className="block md:hidden text-center text-[10px] text-sky-800/70 font-bold uppercase tracking-wider mb-2 animate-pulse">
         ↔ Scorri lateralmente per vedere tutta la spiaggia ↔
       </div>
 
@@ -331,7 +329,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                   <img src={qrCodeUrl} alt="QR Code Prenotazione" className="w-44 h-44 mix-blend-multiply" />
                   <div className="mt-3 pt-2.5 border-t border-slate-200 font-mono text-xs text-slate-800 space-y-1 bg-white p-2 rounded-xl border">
                     <p><strong>DATA:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
-                    <p className="text-orange-600 font-bold"><strong>OMBRELLONE N°:</strong> {selectedSpotNumber}</p>
+                    <p className="text-sky-600 font-bold"><strong>OMBRELLONE N°:</strong> {selectedSpotNumber}</p>
                   </div>
                 </div>
 
@@ -347,21 +345,26 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
               </div>
             ) : (
               <>
-                <h3 className="text-lg font-black text-orange-950 uppercase tracking-tight mb-2">Riepilogo e Pagamento</h3>
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-2">Riepilogo e Pagamento</h3>
                 <p className="text-sm text-slate-600 mb-4">
-                  Stai per riservare l'ombrellone <span className="font-extrabold text-orange-600">N° {selectedSpotNumber}</span>.
+                  Stai per riservare l'ombrellone <span className="font-extrabold text-sky-600">N° {selectedSpotNumber}</span>.
                 </p>
                 
                 <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-4">
                   <p className="border-b border-slate-200/60 pb-1"><strong>Data:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
                   <p className="border-b border-slate-200/60 pb-1"><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
                   <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} persone</p>
+                  {userData.prezzoExtra > 0 && (
+                    <p className="border-b border-slate-200/60 pb-1 text-emerald-600 font-medium">
+                      <strong>Attrezzatura Extra:</strong> {userData.extraSdraio > 0 ? `${userData.extraSdraio} Sdraio ` : ''}{userData.extraSpiaggine > 0 ? `${userData.extraSpiaggine} Spiaggine` : ''} (+ {userData.prezzoExtra.toFixed(2)}€)
+                    </p>
+                  )}
                   <p><strong>Tariffa:</strong> {userData.categoria}</p>
                 </div>
 
-                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3.5 mb-6 flex justify-between items-center text-sm shadow-inner">
-                  <span className="font-bold text-orange-950 uppercase text-xs tracking-wider">Totale da pagare:</span>
-                  <span className="font-black text-lg text-orange-600">{prezzoFinale.toFixed(2)} €</span>
+                <div className="bg-sky-50 border border-sky-100 rounded-2xl p-3.5 mb-6 flex justify-between items-center text-sm shadow-inner">
+                  <span className="font-bold text-sky-950 uppercase text-xs tracking-wider">Totale da pagare:</span>
+                  <span className="font-black text-lg text-sky-600">{prezzoFinale.toFixed(2)} €</span>
                 </div>
 
                 <div className="flex gap-3">
@@ -375,7 +378,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                   <button
                     disabled={isSubmitting}
                     onClick={handlePaymentAndBooking}
-                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center min-w-[140px]"
+                    className="flex-1 bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center min-w-[140px]"
                   >
                     {paymentProcessing ? (
                       <div className="flex items-center gap-2">
