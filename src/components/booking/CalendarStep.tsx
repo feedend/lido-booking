@@ -14,8 +14,8 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
     switch (cat) {
       case 'Esercito': return 7;
       case 'Esercito in quiescenza': return 5;
-      case 'Altra Forza Armata': return 1;
-      case 'Esercito - Parenti': return 1;
+      case 'Altra Forza Armata - DIFESA': return 1;
+      case 'Esercito - Parenti 2° Grado': return 1;
       default: return 0;
     }
   };
