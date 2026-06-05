@@ -1,243 +1,311 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
+import { 
+  Calendar, 
+  Layers, 
+  CheckCircle, 
+  XCircle, 
+  FileText, 
+  LogOut, 
+  RefreshCw, 
+  ShieldAlert,
+  Umbrella
+} from 'lucide-react';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+interface Spot {
+  id: string;
+  internal_code: string; // Allineato al database reale
+  is_available: boolean;
+  notes: string;
+  zone_id: string;
+}
 
 interface Booking {
   id: string;
   booking_date: string;
-  num_guests: number;
-  spot_id: string;
   status: string;
-  total_price: number | null;
-  booking_category: string;
-  profiles?: {
-    full_name: string | null;
-    first_name: string | null;
-    last_name: string | null;
-    email: string | null;
-    phone: string | null;
-  } | null;
-  spots?: {
-    internal_code: string;
-  };
+  spot_id: string;
 }
 
-export default function AdminDashboardPrenotazioni() {
+export default function AdminDashboard() {
+  const [spots, setSpots] = useState<Spot[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
+  const [noteBlock, setNoteBlock] = useState('');
+  
+  // Filtro data inserito per mostrare la situazione reale del giorno specifico
   const [filterDate, setFilterDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
+  
+  const router = useRouter();
 
-  const fetchBookings = async () => {
-    setIsLoading(true);
+  // Carica i dati dal Database sincronizzati per data
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      // Interrogazione relazionale su Supabase
-      const { data, error } = await supabase
+      // 1. Recupera gli ombrelloni (spots) ordinati per codice interno
+      const { data: spotsData, error: spotsErr } = await supabase
+        .from('spots')
+        .select('*')
+        .order('internal_code', { ascending: true });
+
+      if (spotsErr) throw spotsErr;
+
+      // 2. Recupera le prenotazioni confermate SPECIFICHE per il giorno selezionato
+      const { data: bookingsData, error: bookErr } = await supabase
         .from('bookings')
-        .select(`
-          id,
-          booking_date,
-          num_guests,
-          spot_id,
-          status,
-          total_price,
-          booking_category,
-          spots (
-            internal_code
-          ),
-          profiles (
-            full_name,
-            first_name,
-            last_name,
-            email,
-            phone
-          )
-        `)
+        .select('id, booking_date, status, spot_id')
         .eq('booking_date', filterDate)
-        .not('status', 'eq', 'cancelled')
-        .order('created_at', { ascending: true });
+        .eq('status', 'confirmed');
 
-      if (error) throw error;
+      if (bookErr) throw bookErr;
 
-      // Risoluzione Type Error: mappiamo i dati per estrarre il singolo oggetto 
-      // dagli array relazionali generati implicitamente da Supabase
-      const formattedBookings: Booking[] = (data || []).map((item: any) => {
-        return {
-          id: item.id,
-          booking_date: item.booking_date,
-          num_guests: item.num_guests,
-          spot_id: item.spot_id,
-          status: item.status,
-          total_price: item.total_price,
-          booking_category: item.booking_category,
-          profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles,
-          spots: Array.isArray(item.spots) ? item.spots[0] : item.spots,
-        };
-      });
-
-      setBookings(formattedBookings);
-    } catch (err: any) {
-      console.error("Errore nel recupero delle prenotazioni in dashboard:", err.message);
+      if (spotsData) setSpots(spotsData as Spot[]);
+      if (bookingsData) setBookings(bookingsData as Booking[]);
+    } catch (err) {
+      console.error('Errore nel caricamento dati in tempo reale:', err);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
+  // Controllo sessione e trigger al cambio della data filtro
   useEffect(() => {
-    fetchBookings();
-  }, [filterDate]);
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/admin/login');
+      } else {
+        fetchData();
+      }
+    };
+    checkUser();
+  }, [router, filterDate]);
 
-  // Calcoli metrici ed economici per i box analitici
-  const incassoTotale = bookings.reduce((acc, curr) => acc + (curr.total_price || 0), 0);
-  const totalePresenze = bookings.reduce((acc, curr) => acc + (curr.num_guests || 1), 0);
+  // Funzione per Aprire/Chiudere manualmente un ombrellone
+  const handleToggleSpot = async (spot: Spot) => {
+    const updatedAvailability = !spot.is_available;
+    
+    const { error } = await supabase
+      .from('spots')
+      .update({ 
+        is_available: updatedAvailability,
+        notes: updatedAvailability ? '' : (noteBlock || 'Chiuso manualmente')
+      })
+      .eq('id', spot.id);
+
+    if (error) {
+      alert("Errore durante l'aggiornamento dello stato dell'ombrellone");
+    } else {
+      setSelectedSpot(null);
+      setNoteBlock('');
+      fetchData(); // Ricarica istantanea
+    }
+  };
+
+  // Funzione di Logout
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/admin/login');
+  };
+
+  // Calcolo statistiche rapide basate sul giorno selezionato
+  const totalSpots = spots.length;
+  const closedSpots = spots.filter(s => !s.is_available).length;
+  const activeBookingsCount = bookings.length;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white text-sm font-medium font-mono">
+        <RefreshCw className="animate-spin mr-3 h-5 w-5 text-blue-500" />
+        SINCRO SUBABASE IN CORSO...
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 p-4 sm:p-6 font-sans">
-      <div className="max-w-6xl mx-auto">
-        
-        {/* Intestazione Dashboard */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 bg-slate-800/40 p-6 rounded-2xl border border-slate-700/60 shadow-md">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-white">
-              Pannello Di Controllo Lido
-            </h1>
-            <p className="text-xs text-slate-400 mt-1">Sincronizzazione in tempo reale con i profili utente</p>
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+      
+      {/* NAVBAR */}
+      <nav className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-600 p-2 rounded-lg text-white">
+            <Layers className="h-6 w-6" />
           </div>
-          
-          <div className="flex items-center gap-3 bg-slate-950 p-2 rounded-xl border border-slate-800">
-            <span className="text-xs font-bold text-slate-400 uppercase pl-2">Seleziona Giorno:</span>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-white uppercase">Lido Control Panel</h1>
+            <p className="text-xs text-slate-400">Mappa Interattiva & Sincronizzazione Slot</p>
+          </div>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Selettore data integrato in Navbar per controllo immediato */}
+          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 text-xs">
+            <span className="text-slate-400 font-bold uppercase">Data Mappa:</span>
             <input 
               type="date" 
               value={filterDate}
               onChange={(e) => setFilterDate(e.target.value)}
-              className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-semibold text-white focus:outline-none focus:border-orange-500 cursor-pointer"
+              className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-white font-semibold focus:outline-none cursor-pointer text-xs"
             />
           </div>
+
+          <button 
+            onClick={() => router.push('/admin/prenotazioni')}
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-xs px-4 py-2 rounded-lg transition font-medium"
+          >
+            <FileText className="h-4 w-4" /> Registro Prenotazioni
+          </button>
+          
+          <button 
+            onClick={handleLogout}
+            className="flex items-center gap-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs px-4 py-2 rounded-lg border border-red-900/50 transition font-medium"
+          >
+            <LogOut className="h-4 w-4" /> Esci
+          </button>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto p-6 md:p-8 space-y-8">
+        
+        {/* STATS CARDS */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-wider font-bold text-slate-400">Postazioni Totali</p>
+              <h3 className="text-3xl font-black text-white mt-1">{totalSpots}</h3>
+            </div>
+            <Umbrella className="h-10 w-10 text-slate-700" />
+          </div>
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-wider font-bold text-slate-400">Occupati il {filterDate}</p>
+              <h3 className="text-3xl font-black text-emerald-400 mt-1">{activeBookingsCount}</h3>
+            </div>
+            <CheckCircle className="h-10 w-10 text-emerald-600/30" />
+          </div>
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-wider font-bold text-slate-400">Blocchi Manutenzione</p>
+              <h3 className="text-3xl font-black text-amber-500 mt-1">{closedSpots}</h3>
+            </div>
+            <ShieldAlert className="h-10 w-10 text-amber-600/30" />
+          </div>
         </div>
 
-        {/* Indicatori Analitici Metrici */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="bg-gradient-to-br from-orange-600/15 via-orange-600/5 to-transparent border border-orange-500/20 p-5 rounded-2xl shadow-sm">
-            <span className="text-[10px] uppercase font-bold text-orange-400 tracking-wider">Incasso Totale Giornaliero</span>
-            <div className="text-2xl font-black text-white mt-1">€ {incassoTotale.toFixed(2)}</div>
+        {/* CONTENUTO PRINCIPALE */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* GRIGLIA OMBRELLONI */}
+          <div className="lg:col-span-2 bg-slate-900 border border-slate-800 p-6 rounded-xl space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-4">
+              <h2 className="text-sm font-bold text-white uppercase tracking-wide flex items-center gap-2">
+                <Umbrella className="h-4 w-4 text-blue-500" /> Vista Planimetria Spiaggia ({filterDate})
+              </h2>
+              <button onClick={fetchData} className="text-slate-400 hover:text-white p-1 transition">
+                <RefreshCw className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3">
+              {spots.map((spot) => {
+                // Controllo incrociato della prenotazione sull'ID dell'ombrellone
+                const isBooked = bookings.some(b => b.spot_id === spot.id);
+                
+                let bgClass = "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"; 
+                if (!spot.is_available) bgClass = "bg-amber-500/10 border-amber-500/30 text-amber-500 hover:bg-amber-500/20"; 
+                if (isBooked) bgClass = "bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20"; 
+
+                return (
+                  <button
+                    key={spot.id}
+                    onClick={() => setSelectedSpot(spot)}
+                    className={`aspect-square border rounded-xl flex flex-col items-center justify-center font-mono text-sm transition shadow-md ${bgClass} ${selectedSpot?.id === spot.id ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''}`}
+                  >
+                    <span className="text-[10px] opacity-50 uppercase font-sans">N°</span>
+                    <span className="text-base font-black">{spot.internal_code || 'N/D'}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="bg-slate-800/30 border border-slate-700/50 p-5 rounded-2xl">
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ombrelloni Venduti</span>
-            <div className="text-2xl font-black text-white mt-1">{bookings.length}</div>
+
+          {/* PANNELLO DI DETTAGLIO */}
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl h-fit">
+            <h2 className="text-sm font-bold text-white uppercase tracking-wide border-b border-slate-800 pb-4 mb-4">
+              Ispezione Sezione
+            </h2>
+            
+            {selectedSpot ? (
+              <div className="space-y-6">
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xl font-black text-white font-mono">Ombrellone {selectedSpot.internal_code}</span>
+                    <span className={`px-2 py-0.5 text-[10px] rounded font-bold uppercase tracking-wider border ${
+                      selectedSpot.is_available 
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    }`}>
+                      {selectedSpot.is_available ? 'Online' : 'Bloccato'}
+                    </span>
+                  </div>
+                  {selectedSpot.notes && (
+                    <p className="mt-3 text-xs bg-slate-950 p-2.5 border border-slate-800 rounded-md text-amber-400 font-mono">
+                      <strong className="text-slate-400 uppercase text-[10px] block mb-0.5">Nota Interna:</strong> 
+                      {selectedSpot.notes}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-xl">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Azione Rapida Stato</h4>
+                  
+                  {selectedSpot.is_available ? (
+                    <div className="space-y-2">
+                      <label className="text-[11px] text-slate-500 font-medium">Motivazione chiusura o riserva:</label>
+                      <input 
+                        type="text" 
+                        placeholder="Es. Manutenzione, Riservato Direzione..."
+                        value={noteBlock}
+                        onChange={(e) => setNoteBlock(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-blue-500 font-medium"
+                      />
+                      <button
+                        onClick={() => handleToggleSpot(selectedSpot)}
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase py-2.5 rounded-lg flex items-center justify-center gap-2 transition tracking-wider"
+                      >
+                        <XCircle className="h-4 w-4" /> Invalida Vendita Online
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleToggleSpot(selectedSpot)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase py-2.5 rounded-lg flex items-center justify-center gap-2 transition tracking-wider"
+                    >
+                      <CheckCircle className="h-4 w-4" /> Ripristina Disponibilità
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-slate-500 text-xs text-center py-12 font-medium">
+                Seleziona una postazione numerata sulla mappa per regolarne la disponibilità o visualizzare i dettagli.
+              </p>
+            )}
           </div>
-          <div className="bg-slate-800/30 border border-slate-700/50 p-5 rounded-2xl">
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Bagnanti Attesi</span>
-            <div className="text-2xl font-black text-white mt-1">{totalePresenze} <span className="text-xs text-slate-400 font-normal">persone</span></div>
-          </div>
+
         </div>
-
-        {/* Struttura Tabellare Dati */}
-        <div className="bg-slate-800/20 border border-slate-700/50 rounded-2xl overflow-hidden shadow-2xl">
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-16">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mb-3"></div>
-              <p className="text-xs text-slate-400">Interrogazione database in corso...</p>
-            </div>
-          ) : bookings.length === 0 ? (
-            <div className="text-center py-16 text-slate-500 text-sm font-medium">
-              Nessun ombrellone occupato per la data selezionata.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-800/70 border-b border-slate-700 text-[11px] uppercase tracking-wider text-slate-400 font-bold">
-                    <th className="px-6 py-4">Posto</th>
-                    <th className="px-6 py-4">Anagrafica Bagnante</th>
-                    <th className="px-6 py-4">Tariffa Applicata</th>
-                    <th className="px-6 py-4">Ospiti</th>
-                    <th className="px-6 py-4">Stato Logico</th>
-                    <th className="px-6 py-4 text-right">Prezzo Pagato</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/40">
-                  {bookings.map((booking) => {
-                    const profilo = booking.profiles;
-                    
-                    // Composizione stringa anagrafica
-                    let nomeOspite = profilo 
-                      ? (profilo.full_name || `${profilo.first_name || ''} ${profilo.last_name || ''}`.trim())
-                      : null;
-                      
-                    let categoriaPulita = booking.booking_category;
-                    let prezzoVisualizzato = booking.total_price || 0;
-
-                    // Gestione retroattiva dei vecchi record con i pipe '|'
-                    if (!nomeOspite && booking.booking_category?.includes('|')) {
-                      const parti = booking.booking_category.split('|');
-                      categoriaPulita = parti[1]?.trim() || '';
-                      nomeOspite = `Ospite Storico (${parti[2]?.trim() || 'Info'})`;
-                      
-                      if (booking.booking_category.includes('Prezzo:')) {
-                        const match = booking.booking_category.match(/Prezzo:\s*([0-9.]+)/);
-                        if (match) prezzoVisualizzato = parseFloat(match[1]);
-                      }
-                    }
-
-                    return (
-                      <tr key={booking.id} className="hover:bg-slate-800/30 transition-colors text-sm">
-                        {/* Identificativo Ombrellone */}
-                        <td className="px-6 py-4 font-black text-orange-400 font-mono text-sm">
-                          N° {booking.spots?.internal_code || booking.spot_id || 'N/D'}
-                        </td>
-                        
-                        {/* Informazioni Profilo */}
-                        <td className="px-6 py-4 font-semibold text-white">
-                          <div className="flex flex-col gap-0.5">
-                            <span>{nomeOspite || 'Bagnante Diretto'}</span>
-                            {profilo?.email && (
-                              <span className="text-[11px] text-slate-500 font-normal font-mono">
-                                {profilo.email} {profilo.phone ? `| ${profilo.phone}` : ''}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        
-                        {/* Categoria di Tariffazione */}
-                        <td className="px-6 py-4">
-                          <span className="px-2.5 py-0.5 text-xs bg-slate-800 text-slate-300 border border-slate-700 rounded-md font-medium">
-                            {categoriaPulita || 'Standard'}
-                          </span>
-                        </td>
-                        
-                        {/* Numero Persone */}
-                        <td className="px-6 py-4 text-slate-300 font-medium">
-                          {booking.num_guests} {booking.num_guests === 1 ? 'persona' : 'persone'}
-                        </td>
-                        
-                        {/* Stato Logico */}
-                        <td className="px-6 py-4">
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                            Confermato
-                          </span>
-                        </td>
-                        
-                        {/* Quota Finanziaria */}
-                        <td className="px-6 py-4 text-right font-mono font-black text-white text-md">
-                          € {prezzoVisualizzato.toFixed(2)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-      </div>
+      </main>
     </div>
   );
 }
