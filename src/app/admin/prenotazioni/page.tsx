@@ -43,10 +43,11 @@ export default function AdminDashboardPrenotazioni() {
   );
   const router = useRouter();
 
-  const fetchBookings = async () => {
+ const fetchBookings = async () => {
     setIsLoading(true);
     try {
-      // Estraiamo tutti i campi diretti dell'anagrafica inclusa client_name e le relazioni relazionate
+      // Togliamo il filtro .not('status', 'eq', 'cancelled') direttamente dalla query Supabase 
+      // per evitare conflitti con il tipo ENUM 'booking_status' del database
       const { data, error } = await supabase
         .from('bookings')
         .select(`
@@ -74,13 +75,18 @@ export default function AdminDashboardPrenotazioni() {
           )
         `)
         .eq('booking_date', filterDate)
-        .not('status', 'eq', 'cancelled')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
 
-      const formattedBookings: Booking[] = (data || []).map((item: any) => {
-        // Gestione di sicurezza nel caso in cui spots o profiles rispondano come array o null
+      // Filtriamo i cancellati direttamente in JavaScript per non fare arrabbiare Postgres
+      const activeBookings = (data || []).filter((item: any) => {
+        // Converte lo stato in stringa e verifica che non sia cancellato (adatta la parola se usi l'italiano sul DB)
+        const statoStr = String(item.status).toLowerCase();
+        return statoStr !== 'cancelled' && statoStr !== 'cancellato' && statoStr !== 'annullato';
+      });
+
+      const formattedBookings: Booking[] = activeBookings.map((item: any) => {
         const spotObj = Array.isArray(item.spots) ? item.spots[0] : item.spots;
         const profileObj = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
 
@@ -109,7 +115,6 @@ export default function AdminDashboardPrenotazioni() {
       setIsLoading(false);
     }
   };
-
   useEffect(() => {
     fetchBookings();
   }, [filterDate]);
