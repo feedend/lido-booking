@@ -4,12 +4,16 @@ import BookingForm from '@/components/booking/BookingForm';
 import CalendarStep from '@/components/booking/CalendarStep';
 import BeachMap from '@/components/map/BeachMap';
 
+// Aggiornato il tipo UserData per allinearlo perfettamente a Form e Mappa
 type UserData = {
   nome: string;
   cognome: string;
   email: string;
   numUtenti: number;
   categoria: string;
+  extraSdraio: number;    // Aggiunto campo extra
+  extraSpiaggine: number;  // Aggiunto campo extra
+  prezzoExtra: number;     // Aggiunto campo extra
 };
 
 export default function Home() {
@@ -17,7 +21,7 @@ export default function Home() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
 
-  // Fase 1: Completamento del modulo anagrafico
+  // Fase 1: Completamento del modulo anagrafico con i nuovi dati extra
   const handleFormComplete = (data: UserData) => {
     setUserData(data);
     setStep(2);
@@ -30,7 +34,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-100 py-8 px-4 font-sans antialiased">
+    <main className="min-h-screen bg-slate-100 py-8 px-4 font-sans antialiased text-slate-800">
       
       {/* Intestazione dell'applicazione */}
       <div className="max-w-4xl mx-auto text-center mb-8">
@@ -76,9 +80,18 @@ export default function Home() {
             </div>
 
             <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap justify-between items-center gap-2">
-              <span className="bg-blue-50 text-blue-700 text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-tight border border-blue-100">
-                Profilo: {userData.categoria}
-              </span>
+              <div className="flex flex-wrap gap-2">
+                <span className="bg-blue-50 text-blue-700 text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-tight border border-blue-100">
+                  Profilo: {userData.categoria}
+                </span>
+                
+                {/* Mostra il badge degli extra nel riepilogo solo se sono stati selezionati */}
+                {userData.prezzoExtra > 0 && (
+                  <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-tight border border-emerald-100">
+                    Extra: {userData.extraSdraio > 0 ? `${userData.extraSdraio} Sdraio ` : ''}{userData.extraSpiaggine > 0 ? `${userData.extraSpiaggine} Spiaggine` : ''} (+€{userData.prezzoExtra.toFixed(2)})
+                  </span>
+                )}
+              </div>
               
               {step === 3 && (
                 <button 
