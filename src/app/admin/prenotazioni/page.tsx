@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { ArrowLeft, RefreshCw, Mail, Phone, Umbrella } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Mail, Phone, Umbrella, Trash2 } from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -38,73 +38,114 @@ interface Booking {
 export default function AdminDashboardPrenotazioni() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [filterDate, setFilterDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
   const router = useRouter();
 
- const fetchBookings = async () => {
-  setIsLoading(true);
-  try {
-    // Prendiamo TUTTI i record di questa specifica data, senza escludere pending o altri stati
-    const { data, error } = await supabase
-      .from('bookings')
-      .select(`
-        id,
-        booking_date,
-        num_guests,
-        spot_id,
-        status,
-        total_price,
-        booking_category,
-        client_name,
-        guest_first_name,
-        guest_last_name,
-        guest_email,
-        guest_phone,
-        spots (
-          internal_code
-        )
-      `)
-      .eq('booking_date', filterDate); // Cerca la data esatta (es. 2026-06-05)
+  // Controlla il ruolo dell'utente loggato all'inizializzazione
+  useEffect(() => {
+    const checkUserRole = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        // Estraiamo il ruolo dai meta-dati dell'utente o dal profilo custom
+        const role = session.user.user_metadata?.role || 'admin';
+        setUserRole(role);
+      }
+    };
+    checkUserRole();
+  }, []);
 
-    if (error) throw error;
+  const fetchBookings = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          booking_date,
+          num_guests,
+          spot_id,
+          status,
+          total_price,
+          booking_category,
+          client_name,
+          guest_first_name,
+          guest_last_name,
+          guest_email,
+          guest_phone,
+          spots (
+            internal_code
+          )
+        `)
+        .eq('booking_date', filterDate);
 
-    console.log("Dati grezzi ricevuti dal DB per oggi:", data); // <-- CONTROLLA QUESTO CONSOLE.LOG NELL'ISPEZIONA DEL BROWSER!
+      if (error) throw error;
 
-    const formattedBookings: Booking[] = (data || []).map((item: any) => {
-      const spotObj = Array.isArray(item.spots) ? item.spots[0] : item.spots;
+      // Escludiamo le prenotazioni che sono già state annullate
+      const activeBookings = (data || []).filter((item: any) => {
+        const statoStr = String(item.status).toLowerCase();
+        return statoStr !== 'cancelled' && statoStr !== 'cancellato' && statoStr !== 'annullato';
+      });
 
-      return {
-        id: item.id,
-        booking_date: item.booking_date,
-        num_guests: item.num_guests || 1,
-        spot_id: item.spot_id,
-        status: item.status,
-        total_price: item.total_price,
-        booking_category: item.booking_category,
-        client_name: item.client_name,
-        guest_first_name: item.guest_first_name,
-        guest_last_name: item.guest_last_name,
-        guest_email: item.guest_email,
-        guest_phone: item.guest_phone,
-        spots: spotObj,
-      };
-    });
+      const formattedBookings: Booking[] = activeBookings.map((item: any) => {
+        const spotObj = Array.isArray(item.spots) ? item.spots[0] : item.spots;
 
-    setBookings(formattedBookings);
-  } catch (err: any) {
-    console.error("Errore nel recupero delle prenotazioni:", err.message);
-  } finally {
-    setIsLoading(false);
-  }
-};
+        return {
+          id: item.id,
+          booking_date: item.booking_date,
+          num_guests: item.num_guests || 1,
+          spot_id: item.spot_id,
+          status: item.status,
+          total_price: item.total_price,
+          booking_category: item.booking_category,
+          client_name: item.client_name,
+          guest_first_name: item.guest_first_name,
+          guest_last_name: item.guest_last_name,
+          guest_email: item.guest_email,
+          guest_phone: item.guest_phone,
+          spots: spotObj,
+        };
+      });
+
+      setBookings(formattedBookings);
+    } catch (err: any) {
+      console.error("Errore nel recupero delle prenotazioni:", err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Funzione per gestire l'annullamento della prenotazione
+  const handleCancelBooking = async (bookingId: string) => {
+    if (!confirm("Sei sicuro di voler annullare questa prenotazione?")) return;
+    
+    setIsDeleting(bookingId);
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status: 'cancelled' })
+        .eq('id', bookingId);
+
+      if (error) throw error;
+
+      // Aggiorna lo stato locale senza dover ricaricare l'intera pagina
+      setBookings(prev => prev.filter(b => b.id !== bookingId));
+    } catch (err: any) {
+      console.error("Errore durante l'annullamento:", err.message);
+      alert("Impossibile annullare la prenotazione: " + err.message);
+    } finally {
+      setIsDeleting(null);
+    }
+  };
   
   useEffect(() => {
     fetchBookings();
   }, [filterDate]);
 
-  // --- CALCOLI STATISTICHE CARD (Escludendo i blocchi manuali/strutturali dalle metriche reali) ---
+  // --- CALCOLI STATISTICHE CARD ---
   const incassoTotale = bookings.reduce((acc, curr) => {
     if (curr.booking_category?.toLowerCase().includes('blocco') || curr.status === 'blocked') {
       return acc;
@@ -131,12 +172,15 @@ export default function AdminDashboardPrenotazioni() {
         {/* Header Panel */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl">
           <div className="flex items-center gap-4">
-            <button 
-              onClick={() => router.push('/admin')}
-              className="p-2.5 bg-slate-950 hover:bg-slate-800 rounded-xl border border-slate-800 text-slate-400 hover:text-white transition"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
+            {/* Il tasto di ritorno al pannello principale viene nascosto se l'utente è un operatore */}
+            {userRole !== 'operator' && (
+              <button 
+                onClick={() => router.push('/admin')}
+                className="p-2.5 bg-slate-950 hover:bg-slate-800 rounded-xl border border-slate-800 text-slate-400 hover:text-white transition"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            )}
             <div>
               <h1 className="text-lg font-black uppercase tracking-wider text-white">
                 Registro Prenotazioni
@@ -200,12 +244,12 @@ export default function AdminDashboardPrenotazioni() {
                     <th className="px-6 py-4.5 text-center">Pax</th>
                     <th className="px-6 py-4.5">Stato Pagamento</th>
                     <th className="px-6 py-4.5 text-right">Prezzo Netto</th>
+                    <th className="px-6 py-4.5 text-center">Azioni</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-850 bg-slate-900/40">
                   {bookings.map((booking) => {
                     
-                    // Logica a cascata per estrarre l'anagrafica corretta da qualsiasi campo compilato
                     const nomeCompleto = booking.client_name?.trim() 
                       || `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`.trim()
                       || booking.profiles?.full_name 
@@ -277,6 +321,22 @@ export default function AdminDashboardPrenotazioni() {
                         {/* Prezzo */}
                         <td className="px-6 py-4 text-right font-mono font-black text-white text-sm">
                           € {(booking.total_price || 0).toFixed(2)}
+                        </td>
+
+                        {/* Colonna Azioni (Annullamento) */}
+                        <td className="px-6 py-4 text-center">
+                          <button
+                            onClick={() => handleCancelBooking(booking.id)}
+                            disabled={isDeleting === booking.id}
+                            className="p-1.5 bg-slate-950 hover:bg-red-950/40 text-slate-500 hover:text-red-400 border border-slate-850 hover:border-red-900 rounded-lg transition disabled:opacity-40"
+                            title="Annulla Prenotazione"
+                          >
+                            {isDeleting === booking.id ? (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
                         </td>
                       </tr>
                     );
