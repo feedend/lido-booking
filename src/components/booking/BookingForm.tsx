@@ -7,9 +7,9 @@ export type UserData = {
   email: string;
   numUtenti: number;
   categoria: string;
-  extraSdraio: number;    // Aggiunto per il tracciamento sul DB
-  extraSpiaggine: number;  // Aggiunto per il tracciamento sul DB
-  prezzoExtra: number;     // Utile per passarlo al calcolo del totale complessivo
+  extraSdraio: number;    
+  extraSpiaggine: number;  
+  prezzoExtra: number;     
 };
 
 export default function BookingForm({ onComplete }: { onComplete: (data: UserData) => void }) {
@@ -27,11 +27,10 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
   const COSTO_PEZZO = 1.50;
   const MAX_PEZZI = 3;
 
-  // Calcoliamo quanti pezzi totali sono stati selezionati finora
-  const pezziTotali Selezionati = formData.extraSdraio + formData.extraSpiaggine;
+  // Calcoliamo i pezzi totali (variabile corretta senza spazi)
+  const pezziTotali = formData.extraSdraio + formData.extraSpiaggine;
 
   const handleSdraioChange = (valore: number) => {
-    // Verifica che il nuovo totale non superi il limite di 3 pezzi complessivi
     if (valore + formData.extraSpiaggine <= MAX_PEZZI) {
       const nuoviPezzi = valore + formData.extraSpiaggine;
       setFormData({
@@ -43,7 +42,6 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
   };
 
   const handleSpiaggineChange = (valore: number) => {
-    // Verifica che il nuovo totale non superi il limite di 3 pezzi complessivi
     if (formData.extraSdraio + valore <= MAX_PEZZI) {
       const nuoviPezzi = formData.extraSdraio + valore;
       setFormData({
@@ -131,7 +129,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Attrezzatura Extra (€1.50/pz)</span>
             <span className="text-[11px] font-mono font-bold text-slate-500">
-              Scelti: {pezziTotaliSelezionati} / {MAX_PEZZI} Max
+              Scelti: {pezziTotali} / {MAX_PEZZI} Max
             </span>
           </div>
 
@@ -145,7 +143,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
               >
                 {[0, 1, 2, 3].map(n => (
                   <option key={n} value={n} disabled={n + formData.extraSpiaggine > MAX_PEZZI}>
-                    {n} {n === 1 ? 'Sdraio' : 'Sdraio'}
+                    {n}
                   </option>
                 ))}
               </select>
@@ -160,14 +158,14 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
               >
                 {[0, 1, 2, 3].map(n => (
                   <option key={n} value={n} disabled={formData.extraSdraio + n > MAX_PEZZI}>
-                    {n} {n === 1 ? 'Spiaggina' : 'Spiaggine'}
+                    {n}
                   </option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Feedback visivo del prezzo parziale degli extra */}
+          {/* Cifra parziale degli accessori */}
           {formData.prezzoExtra > 0 && (
             <div className="text-right text-[11px] font-mono font-black text-emerald-600 pt-1">
               Supplemento attrezzatura: + € {formData.prezzoExtra.toFixed(2)}
