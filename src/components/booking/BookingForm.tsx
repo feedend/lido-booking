@@ -1,6 +1,8 @@
 'use client';
 import React, { useState } from 'react';
 
+export const dynamic = 'force-dynamic';
+
 export type UserData = {
   nome: string;
   cognome: string;
