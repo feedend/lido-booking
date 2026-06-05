@@ -41,7 +41,7 @@ export default function AdminDashboard() {
   const [spots, setSpots] = useState<Spot[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
+  const [selectedSpot, setSelectedSpot] = useState<any>(null);
   const [noteBlock, setNoteBlock] = useState('');
   const [filterDate, setFilterDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -49,7 +49,7 @@ export default function AdminDashboard() {
   
   const router = useRouter();
 
-  // La stessa identica struttura di righe e corridoi della mappa pubblica
+  // Struttura geometrica 1:1 con il client pubblico
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
@@ -67,15 +67,14 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Recupera tutti gli ombrelloni attivi
+      // 1. Recupera TUTTI gli ombrelloni senza filtri per non rischiare di nasconderli
       const { data: spotsData, error: spotsErr } = await supabase
         .from('spots')
-        .select('id, internal_code, is_available, notes')
-        .eq('is_active', true);
+        .select('id, internal_code, is_available, notes');
 
       if (spotsErr) throw spotsErr;
 
-      // 2. Recupera le prenotazioni del giorno con i nuovi dati anagrafici diretti
+      // 2. Recupera le prenotazioni attive del giorno
       const { data: bookingsData, error: bookErr } = await supabase
         .from('bookings')
         .select('id, spot_id, guest_first_name, guest_last_name, guest_email, guest_phone, booking_category')
@@ -87,7 +86,7 @@ export default function AdminDashboard() {
       setSpots((spotsData as Spot[]) || []);
       setBookings((bookingsData as Booking[]) || []);
     } catch (err) {
-      console.error('Errore nel caricamento dei dati della dashboard:', err);
+      console.error('Errore caricamento dati admin:', err);
     } finally {
       setLoading(false);
     }
@@ -105,64 +104,86 @@ export default function AdminDashboard() {
     checkUser();
   }, [router, filterDate]);
 
-  const handleToggleSpot = async (spot: Spot) => {
-    const updatedAvailability = !spot.is_available;
+  const handleToggleSpot = async (spotId: string, currentAvailable: boolean, internalCode: string) => {
+    const updatedAvailability = !currentAvailable;
     
+    // Se lo spot non esiste fisicamente nel DB, lo creiamo al volo per poterlo bloccare
+    if (!spotId) {
+      const { data: newSpot, error: createErr } = await supabase
+        .from('spots')
+        .insert([{ internal_code: internalCode.toString(), is_available: updatedAvailability, notes: noteBlock || 'Chiuso manualmente', is_active: true }])
+        .select()
+        .single();
+        
+      if (createErr) {
+        alert("Errore creazione ombrellone: " + createErr.message);
+        return;
+      }
+      setNoteBlock('');
+      fetchData();
+      setSelectedSpot(newSpot);
+      return;
+    }
+
     const { error } = await supabase
       .from('spots')
       .update({ 
         is_available: updatedAvailability,
         notes: updatedAvailability ? null : (noteBlock || 'Chiuso manualmente')
       })
-      .eq('id', spot.id);
+      .eq('id', spotId);
 
     if (error) {
-      alert("Errore durante l'aggiornamento dello stato");
+      alert("Errore aggiornamento: " + error.message);
     } else {
-      setSelectedSpot(prev => prev ? { ...prev, is_available: updatedAvailability, notes: updatedAvailability ? null : (noteBlock || 'Chiuso manualmente') } : null);
       setNoteBlock('');
       fetchData();
+      // Reset ispezione per aggiornare la grafica
+      setSelectedSpot(null);
     }
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/admin/login');
-  };
-
-  // Trova la prenotazione associata a un ombrellone (se esiste)
-  const getBookingForSpot = (spotId: string) => {
-    return bookings.find(b => b.spot_id === spotId);
   };
 
   const renderAdminSpot = (num: number) => {
-    const correspondingSpot = spots.find(s => parseInt(s.internal_code) === num);
-    
-    if (!correspondingSpot) {
-      return <div key={num} className="w-10 h-12 opacity-10" />;
-    }
+    // Cerchiamo la corrispondenza pulendo e convertendo sia stringhe che numeri
+    const correspondingSpot = spots.find(s => {
+      if (!s.internal_code) return false;
+      const cleanDbCode = s.internal_code.toString().trim().replace(/^0+/, '');
+      return cleanDbCode === num.toString();
+    });
 
-    const booking = getBookingForSpot(correspondingSpot.id);
+    const booking = correspondingSpot ? bookings.find(b => b.spot_id === correspondingSpot.id) : null;
     const isBooked = !!booking;
-    const isManuallyBlocked = !correspondingSpot.is_available;
+    const isManuallyBlocked = correspondingSpot ? !correspondingSpot.is_available : false;
 
-    // Colore di stato prioritario
-    let btnClass = "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20"; 
+    // Classi di stile dinamiche basate sullo stato reale
+    let btnClass = "bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white";
     if (isManuallyBlocked) {
-      btnClass = "bg-amber-500/20 border-amber-500/60 text-amber-500 hover:bg-amber-500/30 font-bold";
+      btnClass = "bg-amber-500/20 border-amber-500/60 text-amber-400 hover:bg-amber-500/30 font-bold";
     } else if (isBooked) {
-      btnClass = "bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30";
+      btnClass = "bg-red-500/20 border-red-500/60 text-red-400 hover:bg-red-500/30";
+    } else if (correspondingSpot) {
+      // Esiste a DB ed è libero
+      btnClass = "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20";
     }
+
+    // Oggetto fittizio da passare all'ispezione se l'ombrellone non è ancora registrato nella tabella spots
+    const spotDataData = correspondingSpot || {
+      id: '',
+      internal_code: num.toString(),
+      is_available: true,
+      notes: null
+    };
 
     return (
       <button
         key={num}
-        onClick={() => setSelectedSpot(correspondingSpot)}
-        className={`w-10 h-12 border rounded-lg flex flex-col items-center justify-center font-mono text-xs transition relative group ${btnClass} ${selectedSpot?.id === correspondingSpot.id ? 'ring-2 ring-blue-500' : ''}`}
+        type="button"
+        onClick={() => setSelectedSpot({ ...spotDataData, _booking: booking })}
+        className={`w-9 h-11 border text-[11px] rounded-lg flex items-center justify-center font-black transition relative ${btnClass} ${selectedSpot?.internal_code === num.toString() ? 'ring-2 ring-blue-500 border-transparent shadow-lg shadow-blue-500/20 scale-105' : ''}`}
       >
-        <span className="text-[10px] font-black">{num}</span>
-        {isBooked && !isManuallyBlocked && (
-          <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
+        {num}
+        {isBooked && (
+          <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
         )}
       </button>
     );
@@ -173,177 +194,180 @@ export default function AdminDashboard() {
       {/* Navbar */}
       <nav className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-3">
-          <div className="bg-orange-600 p-2 rounded-lg text-white">
+          <div className="bg-orange-600 p-2 rounded-lg text-white shadow-md shadow-orange-600/20">
             <Layers className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight text-white uppercase">Lido Control Panel</h1>
-            <p className="text-xs text-slate-400">Planimetria Simmetrica Real-Time</p>
+            <h1 className="text-sm font-black tracking-wider text-white uppercase">Lido Control Panel</h1>
+            <p className="text-[11px] text-slate-400">Planimetria Simmetrica Real-Time</p>
           </div>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 text-xs">
-            <span className="text-slate-400 font-bold uppercase">Data:</span>
+          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
+            <span className="text-slate-400 font-bold uppercase text-[10px]">Data Mappa:</span>
             <input 
               type="date" 
               value={filterDate}
               onChange={(e) => setFilterDate(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-white font-semibold text-xs"
+              className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-0.5 text-white font-bold text-xs focus:outline-none focus:border-orange-500"
             />
           </div>
           <button 
             onClick={() => router.push('/admin/prenotazioni')}
-            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-xs px-4 py-2 rounded-lg transition font-medium"
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl transition"
           >
-            <FileText className="h-4 w-4" /> Registro
+            <FileText className="h-4 w-4 text-slate-400" /> Registro
           </button>
           <button 
-            onClick={handleLogout}
-            className="flex items-center gap-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 text-xs px-4 py-2 rounded-lg border border-red-900/50 transition font-medium"
+            onClick={async () => { await supabase.auth.signOut(); router.push('/admin/login'); }}
+            className="flex items-center gap-2 bg-red-950/30 hover:bg-red-900/40 text-red-400 text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl border border-red-900/30 transition"
           >
             <LogOut className="h-4 w-4" /> Esci
           </button>
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
-        {/* Layout a due Colonne: Mappa della spiaggia a sinistra, Ispezione a destra */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <main className="max-w-[1400px] mx-auto p-4 md:p-6 space-y-6">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
           
-          {/* MAPPA SPIAGGIA (Prende 2 colonne di spazio) */}
-          <div className="lg:col-span-2 bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4 overflow-x-auto">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3 min-w-[900px]">
-              <h2 className="text-xs font-bold text-white uppercase tracking-wide flex items-center gap-2">
+          {/* MAPPA SPIAGGIA (Occupa 3 colonne di spazio per massima ampiezza) */}
+          <div className="xl:col-span-3 bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4 shadow-xl overflow-x-auto">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-3 min-w-[920px]">
+              <h2 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
                 <Umbrella className="h-4 w-4 text-orange-500" /> Disposizione Speculare Spiaggia
               </h2>
-              <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider">
-                <span className="flex items-center gap-1.5 text-emerald-400"><span className="w-2 h-2 rounded-full bg-emerald-500/20 border border-emerald-500"></span> Libero</span>
-                <span className="flex items-center gap-1.5 text-red-400"><span className="w-2 h-2 rounded-full bg-red-500/20 border border-red-500"></span> Prenotato</span>
-                <span className="flex items-center gap-1.5 text-amber-400"><span className="w-2 h-2 rounded-full bg-amber-500/20 border border-amber-500"></span> Blocco Fisso</span>
+              <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-wider">
+                <span className="flex items-center gap-1.5 text-emerald-400"><span className="w-2.5 h-2.5 rounded-md bg-emerald-500/20 border border-emerald-500/50"></span> Attivo</span>
+                <span className="flex items-center gap-1.5 text-red-400"><span className="w-2.5 h-2.5 rounded-md bg-red-500/20 border border-red-500/50"></span> Occupato</span>
+                <span className="flex items-center gap-1.5 text-amber-400"><span className="w-2.5 h-2.5 rounded-md bg-amber-500/20 border border-amber-500/50"></span> Bloccato</span>
+                <span className="flex items-center gap-1.5 text-slate-400"><span className="w-2.5 h-2.5 rounded-md bg-slate-900 border border-slate-800"></span> Virtuale</span>
               </div>
             </div>
 
-            {/* Contenitore Griglia identico al Client */}
-            <div className="flex flex-col gap-2 min-w-[900px] pt-2">
-              {rows.map((row, rowIndex) => (
-                <div key={rowIndex} className="flex items-center justify-start gap-3">
-                  
-                  {/* Settore Sinistro (Colonne 1-10) */}
-                  <div className="w-[410px] grid grid-cols-10 gap-1 justify-items-start">
-                    {row.startL ? (
-                      <>
-                        {Array.from({ length: 10 - (row.endL! - row.startL! + 1) }).map((_, i) => (
-                          <div key={`empty-l-${i}`} className="w-10 h-12 opacity-0 pointer-events-none" />
-                        ))}
-                        {Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderAdminSpot)}
-                      </>
-                    ) : (
-                      Array.from({ length: 10 }).map((_, i) => <div key={`blank-l-${i}`} className="w-10 h-12" />)
-                    )}
-                  </div>
-                  
-                  {/* Corridoio Centrale */}
-                  <div className="w-14 shrink-0 flex justify-center items-center font-black text-slate-400 uppercase text-[9px] tracking-wider bg-slate-950 py-1.5 rounded-lg border border-slate-800 shadow-inner text-center">
-                    {row.center || "•"}
-                  </div>
-                  
-                  {/* Settore Destro (Colonne 11-20) */}
-                  <div className="w-[410px] grid grid-cols-10 gap-1 justify-items-start">
-                    {row.startR ? (
-                      <>
-                        {Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderAdminSpot)}
-                        {Array.from({ length: 10 - (row.endR! - row.startR! + 1) }).map((_, i) => (
-                          <div key={`empty-r-${i}`} className="w-10 h-12 opacity-0 pointer-events-none" />
-                        ))}
-                      </>
-                    ) : (
-                      Array.from({ length: 10 }).map((_, i) => <div key={`blank-r-${i}`} className="w-10 h-12" />)
-                    )}
-                  </div>
-
+            {/* Generazione dinamica della griglia */}
+            <div className="flex flex-col gap-2.5 min-w-[920px] pt-2 pb-2">
+              {loading ? (
+                <div className="text-center py-24 text-xs font-mono text-slate-500 animate-pulse uppercase tracking-widest">
+                  Sincronizzazione Layout...
                 </div>
-              ))}
+              ) : (
+                rows.map((row, rowIndex) => (
+                  <div key={rowIndex} className="flex items-center justify-start gap-4">
+                    
+                    {/* Settore Sinistro (Fila 1-10) */}
+                    <div className="w-[420px] grid grid-cols-10 gap-1 justify-items-start">
+                      {row.startL ? (
+                        <>
+                          {Array.from({ length: 10 - (row.endL! - row.startL! + 1) }).map((_, i) => (
+                            <div key={`empty-l-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />
+                          ))}
+                          {Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderAdminSpot)}
+                        </>
+                      ) : (
+                        Array.from({ length: 10 }).map((_, i) => <div key={`blank-l-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />)
+                      )}
+                    </div>
+                    
+                    {/* Passerella Centrale */}
+                    <div className="w-14 shrink-0 flex justify-center items-center font-black text-slate-500 uppercase text-[9px] tracking-widest bg-slate-950 py-2 rounded-xl border border-slate-800 shadow-inner text-center">
+                      {row.center || "•"}
+                    </div>
+                    
+                    {/* Settore Destro (Fila 11-20) */}
+                    <div className="w-[420px] grid grid-cols-10 gap-1 justify-items-start">
+                      {row.startR ? (
+                        <>
+                          {Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderAdminSpot)}
+                          {Array.from({ length: 10 - (row.endR! - row.startR! + 1) }).map((_, i) => (
+                            <div key={`empty-r-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />
+                          ))}
+                        </>
+                      ) : (
+                        Array.from({ length: 10 }).map((_, i) => <div key={`blank-r-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />)
+                      )}
+                    </div>
+
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
-          {/* ISPEZIONE DETTAGLIATA PANNELLO LATERALE */}
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl h-fit space-y-4">
-            <h2 className="text-xs font-bold text-white uppercase tracking-wide border-b border-slate-800 pb-3">
-              Ispezione Postazione
-            </h2>
+          {/* PANNELLO DI DETTAGLIO ED ISPEZIONE */}
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-xl space-y-4">
+            <h3 className="text-xs font-black text-white uppercase tracking-wider border-b border-slate-800 pb-3">
+              Ispezione Ombrellone
+            </h3>
             
             {selectedSpot ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-black text-white font-mono">Ombrellone {selectedSpot.internal_code}</span>
-                  <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase border ${
+              <div className="space-y-4 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                  <span className="text-sm font-black text-white font-mono">Postazione N° {selectedSpot.internal_code}</span>
+                  <span className={`px-2 py-0.5 text-[9px] rounded-lg font-black uppercase border ${
                     selectedSpot.is_available ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                    }`}>
-                    {selectedSpot.is_available ? 'Disponibile Online' : 'Blocco Totale'}
+                  }`}>
+                    {selectedSpot.is_available ? 'Attivo' : 'Bloccato'}
                   </span>
                 </div>
 
-                {/* Mostra i dati anagrafici reali estratti direttamente se c'è una prenotazione */}
-                {getBookingForSpot(selectedSpot.id) ? (
-                  <div className="bg-slate-950 border border-slate-800 p-3.5 rounded-xl space-y-2 text-xs">
-                    <p className="text-red-400 font-bold uppercase tracking-wider text-[10px] flex items-center gap-1">
-                      <User className="w-3.5 h-3.5" /> Dati Occupante Giorno Selezionato:
+                {selectedSpot._booking ? (
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-2 text-xs">
+                    <p className="text-red-400 font-black uppercase tracking-wider text-[9px] flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5" /> Informazioni Bagnante:
                     </p>
-                    <div className="space-y-1 text-slate-300 font-mono">
-                      <p><strong>Nome:</strong> {getBookingForSpot(selectedSpot.id)?.guest_first_name} {getBookingForSpot(selectedSpot.id)?.guest_last_name}</p>
-                      <p><strong>Email:</strong> {getBookingForSpot(selectedSpot.id)?.guest_email || 'Non fornita'}</p>
-                      <p><strong>Tel:</strong> {getBookingForSpot(selectedSpot.id)?.guest_phone || 'Non fornito'}</p>
-                      <p><strong>Tariffa:</strong> <span className="text-orange-400">{getBookingForSpot(selectedSpot.id)?.booking_category}</span></p>
+                    <div className="space-y-1.5 text-slate-300 font-mono mt-2">
+                      <p><strong className="text-slate-500">Nome:</strong> {selectedSpot._booking.guest_first_name} {selectedSpot._booking.guest_last_name}</p>
+                      <p><strong className="text-slate-500">Email:</strong> {selectedSpot._booking.guest_email || 'Non inserita'}</p>
+                      <p><strong className="text-slate-500">Tel:</strong> {selectedSpot._booking.guest_phone || 'Non inserito'}</p>
+                      <p><strong className="text-slate-500">Tariffa:</strong> <span className="text-orange-400 font-bold">{selectedSpot._booking.booking_category}</span></p>
                     </div>
                   </div>
                 ) : (
-                  !isSubmitting && selectedSpot.is_available && (
-                    <p className="text-[11px] text-slate-500 font-medium italic text-center py-2">
-                      Nessuna prenotazione attiva per questo giorno.
-                    </p>
-                  )
-                )}
-
-                {selectedSpot.notes && (
-                  <p className="text-xs bg-slate-950 p-2.5 border border-slate-800 rounded-lg text-amber-400 font-mono">
-                    <strong className="text-slate-400 uppercase text-[9px] block mb-0.5">Nota Blocco Fisso:</strong> 
-                    {selectedSpot.notes}
+                  <p className="text-[11px] text-slate-500 font-medium italic text-center py-4 bg-slate-950/40 rounded-xl border border-slate-850">
+                    Nessun occupante per il {new Date(filterDate).toLocaleDateString('it-IT')}.
                   </p>
                 )}
 
-                {/* Pannello di Blocco Manuale permanente */}
-                <div className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-xl pt-3">
-                  <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Gestione Stato ad Oltranza</h4>
+                {selectedSpot.notes && (
+                  <div className="text-xs bg-slate-950 p-3 border border-slate-800 rounded-xl text-amber-400 font-mono">
+                    <strong className="text-slate-500 uppercase text-[9px] block mb-0.5">Motivazione Blocco:</strong> 
+                    {selectedSpot.notes}
+                  </div>
+                )}
+
+                {/* Sezione per bloccare o sbloccare la postazione ad oltranza */}
+                <div className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-2xl">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Azioni Amministrative</h4>
                   {selectedSpot.is_available ? (
                     <div className="space-y-2">
                       <input 
                         type="text" 
-                        placeholder="Motivo del blocco (es. Riservato Direzione)..."
+                        placeholder="Nota o motivo del blocco permanente..."
                         value={noteBlock}
                         onChange={(e) => setNoteBlock(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-orange-500"
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-orange-500 font-medium"
                       />
                       <button
-                        onClick={() => handleToggleSpot(selectedSpot)}
-                        className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase py-2 rounded-lg flex items-center justify-center gap-2 transition"
+                        onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-amber-600/10"
                       >
-                        <XCircle className="h-4 w-4" /> Blocca per ogni giorno
+                        <XCircle className="h-4 w-4" /> Disattiva Postazione
                       </button>
                     </div>
                   ) : (
                     <button
-                      onClick={() => handleToggleSpot(selectedSpot)}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase py-2 rounded-lg flex items-center justify-center gap-2 transition"
+                      onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-600/10"
                     >
-                      <CheckCircle className="h-4 w-4" /> Sblocca Ombrellone
+                      <CheckCircle className="h-4 w-4" /> Riattiva e Rendi Disponibile
                     </button>
                   )}
                 </div>
               </div>
             ) : (
-              <p className="text-slate-500 text-xs text-center py-12 font-medium">
-                Seleziona un ombrellone sulla mappa simmetrica per vederne i bagnanti o modificarne lo stato permanente.
+              <p className="text-slate-500 text-xs text-center py-16 font-medium italic">
+                Seleziona una postazione numerata per verificarne i bagnanti o effettuarne la chiusura.
               </p>
             )}
           </div>
