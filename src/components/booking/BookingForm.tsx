@@ -9,6 +9,7 @@ export type UserData = {
   email: string;
   numUtenti: number;
   categoria: string;
+  telefono?: string;
   extraSdraio: number;    
   extraSpiaggine: number;  
   prezzoExtra: number;     
@@ -20,7 +21,8 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
     cognome: '',
     email: '',
     numUtenti: 1,
-    categoria: 'Esercito', // Valore di default standardizzato
+    categoria: 'Esercito',
+    telefono: '',
     extraSdraio: 0,
     extraSpiaggine: 0,
     prezzoExtra: 0
@@ -29,7 +31,6 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
   const COSTO_PEZZO = 1.50;
   const MAX_PEZZI = 3;
 
-  // Calcoliamo i pezzi totali
   const pezziTotali = formData.extraSdraio + formData.extraSpiaggine;
 
   const handleSdraioChange = (valore: number) => {
@@ -98,6 +99,17 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
             className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
             type="email" 
             onChange={(e) => setFormData({...formData, email: e.target.value})}
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Telefono (Opzionale)</label>
+          <input 
+            placeholder="3331234567"
+            value={formData.telefono}
+            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
+            type="tel" 
+            onChange={(e) => setFormData({...formData, telefono: e.target.value})}
           />
         </div>
 
