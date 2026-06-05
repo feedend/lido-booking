@@ -1,33 +1,21 @@
 'use client';
 import { useState } from 'react';
-import BookingForm from '@/components/booking/BookingForm';
+import BookingForm, { type UserData } from '@/components/booking/BookingForm';
 import CalendarStep from '@/components/booking/CalendarStep';
 import BeachMap from '@/components/map/BeachMap';
-
-// Aggiornato il tipo UserData per allinearlo perfettamente a Form e Mappa
-type UserData = {
-  nome: string;
-  cognome: string;
-  email: string;
-  numUtenti: number;
-  categoria: string;
-  extraSdraio: number;    // Aggiunto campo extra
-  extraSpiaggine: number;  // Aggiunto campo extra
-  prezzoExtra: number;     // Aggiunto campo extra
-};
 
 export default function Home() {
   const [step, setStep] = useState<number>(1); // 1: Registrazione, 2: Calendario, 3: Mappa degli Ombrelloni
   const [userData, setUserData] = useState<UserData | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
 
-  // Fase 1: Completamento del modulo anagrafico con i nuovi dati extra
+  // Fase 1: Completamento del modulo anagrafico
   const handleFormComplete = (data: UserData) => {
     setUserData(data);
     setStep(2);
   };
 
-  // Fase 2: Selezione della data dal calendario con restrizioni
+  // Fase 2: Selezione della data dal calendario
   const handleDateSelect = (date: string) => {
     setSelectedDate(date);
     setStep(3);
