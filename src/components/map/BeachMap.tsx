@@ -15,6 +15,7 @@ type BeachMapProps = {
     email: string;
     numUtenti: number;
     categoria: string;
+    telefono?: string; // Aggiunto per tracciabilità diretta
   };
 };
 
@@ -25,7 +26,7 @@ interface DBSpot {
 }
 
 export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
-  const [reservedSpots, setReservedSpots] = useState<number[]>([]);
+  const [reservedSpots, setReservedSpots] = useState<string[]>([]); // Gestito tramite ID reali (UUID string)
   const [dbSpots, setDbSpots] = useState<DBSpot[]>([]);
   const [selectedSpotNumber, setSelectedSpotNumber] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,7 +41,8 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         // 1. Recupera gli ombrelloni dal database
         const { data: spotsData } = await supabase
           .from('spots')
-          .select('id, internal_code, is_available');
+          .select('id, internal_code, is_available')
+          .eq('is_active', true); // Mostra solo postazioni attive nel layout reale
         
         if (spotsData) {
           setDbSpots(spotsData);
@@ -49,24 +51,17 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         // 2. Recupera le prenotazioni attive del giorno selezionato
         const { data: bookingsData } = await supabase
           .from('bookings')
-          .select('booking_category, spot_id, status') 
+          .select('spot_id, status, booking_category') 
           .eq('booking_date', selectedDate)
           .not('status', 'eq', 'cancelled');
 
-        if (bookingsData) {
-          const occupati = bookingsData
-            .map(b => {
-              // Fallback se ci sono ancora record vecchi formattati con stringhe a pipe '|'
-              if (b.booking_category && b.booking_category.includes('|')) {
-                return parseInt(b.booking_category.split('|')[0]);
-              }
-              // Flusso nativo moderno: ricava il numero dall'oggetto o dall'internal_code correlato
-              const spotTrovato = spotsData?.find(s => s.id === b.spot_id);
-              return spotTrovato ? parseInt(spotTrovato.internal_code) : parseInt(b.spot_id);
-            })
-            .filter(num => !isNaN(num));
+        if (bookingsData && spotsData) {
+          // Mapping pulito basato sugli ID relazionali
+          const occupatiIds = bookingsData
+            .map(b => b.spot_id)
+            .filter(id => id !== null) as string[];
           
-          setReservedSpots(occupati);
+          setReservedSpots(occupatiIds);
         }
       } catch (err) {
         console.error("Errore nel caricamento dei dati della spiaggia:", err);
@@ -105,20 +100,19 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     setIsSubmitting(true);
 
     try {
-      // 1. Recupera la sessione dell'utente autenticato (UUID da auth.users)
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        alert("Sessione scaduta o utente non autenticato. Effettua nuovamente il login.");
+      // Ottieni l'ID reale della postazione partendo dal numero selezionato in mappa
+      const matchingSpot = dbSpots.find(s => parseInt(s.internal_code) === selectedSpotNumber);
+      if (!matchingSpot) {
+        alert("Errore nella configurazione della postazione.");
         setIsSubmitting(false);
         setPaymentProcessing(false);
         return;
       }
 
-      // 2. Controllo anti-duplicati sul database per la stessa data
+      // 1. Controllo anti-duplicati basato sulla mail inserita nel form per questa data
       const { data: existingBookings, error: fetchError } = await supabase
         .from('bookings')
-        .select('booking_category, user_id')
+        .select('guest_email, booking_category')
         .eq('booking_date', selectedDate)
         .not('status', 'eq', 'cancelled');
 
@@ -130,19 +124,12 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       }
 
       const haGiaPrenotato = existingBookings?.some(b => {
-        // Controllo sui record legacy scritti in stringa
-        if (b.booking_category && b.booking_category.includes('|')) {
-          const parti = b.booking_category.split('|');
-          if (parti.length >= 3) {
-            return parti[1].trim() === userData.categoria && parti[2].trim().toLowerCase() === userData.email.toLowerCase();
-          }
-        }
-        // Controllo moderno basato sul vincolo relazionale dell'UUID utente
-        return b.user_id === user.id;
+        // Controllo moderno sulla colonna della mail diretta della prenotazione
+        return b.guest_email?.toLowerCase() === userData.email.toLowerCase();
       });
 
       if (haGiaPrenotato) {
-        alert(`Attenzione! Risulta già una prenotazione attiva a tuo nome per la data selezionata.`);
+        alert(`Attenzione! Risulta già una prenotazione attiva a nome di ${userData.email} per la data selezionata.`);
         setPaymentProcessing(false);
         setIsSubmitting(false);
         setSelectedSpotNumber(null);
@@ -153,22 +140,24 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       await new Promise((resolve) => setTimeout(resolve, 3000));
       setPaymentProcessing(false); 
 
-      // Mappatura dell'ID dell'ombrellone
-      const matchingSpot = dbSpots.find(s => parseInt(s.internal_code) === selectedSpotNumber);
-      const spotIdToSave = matchingSpot ? matchingSpot.id : selectedSpotNumber.toString();
-
-      // 3. Inserimento pulito e relazionale (user_id punta a public.profiles.id)
+      // 2. Inserimento dei dati anagrafici DIRETTAMENTE nella riga della prenotazione
+      // user_id rimane NULL eliminando l'errore della Foreign Key violata
       const { error } = await supabase
         .from('bookings')
         .insert([
           {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
-            spot_id: spotIdToSave,
-            user_id: user.id,                       // Associa l'UUID dell'utente loggato
-            total_price: prezzoFinale,             // Prezzo salvato come valore numerico decimale puro
-            booking_category: userData.categoria,   // Stringa della sola categoria (es: "Esercito")
-            status: 'confirmed'
+            spot_id: matchingSpot.id,               // ID Relazionale corretto (UUID)
+            user_id: null,                          // Sganciato dall'autenticazione obbligatoria
+            total_price: prezzoFinale,              // Prezzo decimale puro
+            booking_category: userData.categoria,   // Categoria tariffaria
+            status: 'confirmed',
+            // Nuove colonne per raccogliere l'anagrafica al volo
+            guest_first_name: userData.nome,
+            guest_last_name: userData.cognome,
+            guest_email: userData.email,
+            guest_phone: userData.telefono || null
           }
         ]);
 
@@ -196,7 +185,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         }
 
         setBookingSuccess(true);
-        setReservedSpots([...reservedSpots, selectedSpotNumber]);
+        setReservedSpots([...reservedSpots, matchingSpot.id]);
       }
     } catch (err) {
       alert("Si è verificato un errore critico durante la transazione.");
@@ -225,9 +214,15 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   ];
 
   const renderSpot = (num: number) => {
-    const isDbReserved = reservedSpots.includes(num);
     const correspondingDbSpot = dbSpots.find(s => parseInt(s.internal_code) === num);
-    const isDeactivatedByAdmin = correspondingDbSpot ? correspondingDbSpot.is_available === false : false;
+    
+    // Se l'ombrellone non esiste sul database, nascondilo o rendilo non cliccabile
+    if (!correspondingDbSpot) return <div key={num} className="w-11 h-14 opacity-10 pointer-events-none" />;
+
+    const isDbReserved = reservedSpots.includes(correspondingDbSpot.id);
+    // Controllo se l'admin ha impostato "is_available = false" (Blocco manuale ad oltranza)
+    const isDeactivatedByAdmin = correspondingDbSpot.is_available === false;
+    
     const isReserved = isDbReserved || isDeactivatedByAdmin;
 
     return (
