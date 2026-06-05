@@ -43,58 +43,72 @@ export default function AdminDashboardPrenotazioni() {
   );
   const router = useRouter();
 
-  const fetchBookings = async () => {
-    setIsLoading(true);
-    try {
-      // Estraiamo sia i nuovi campi diretti guest_* che la vecchia relazione profiles
-      const { data, error } = await supabase
-        .from('bookings')
-        .select(`
-          id,
-          booking_date,
-          num_guests,
-          spot_id,
-          status,
-          total_price,
-          booking_category,
-          guest_first_name,
-          guest_last_name,
-          guest_email,
-          guest_phone,
-          spots (
-            internal_code
-          ),
-          profiles (
-            full_name,
-            first_name,
-            last_name,
-            email,
-            phone
-          )
-        `)
-        .eq('booking_date', filterDate)
-        .not('status', 'eq', 'cancelled')
-        .order('created_at', { ascending: true });
+ const fetchBookings = async () => {
+  setIsLoading(true);
+  try {
+    // 1. Includiamo esplicitamente client_name nella select
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        booking_date,
+        num_guests,
+        spot_id,
+        status,
+        total_price,
+        booking_category,
+        client_name,
+        guest_first_name,
+        guest_last_name,
+        guest_email,
+        guest_phone,
+        spots (
+          internal_code
+        ),
+        profiles (
+          full_name,
+          first_name,
+          last_name,
+          email,
+          phone
+        )
+      `)
+      .eq('booking_date', filterDate)
+      .not('status', 'eq', 'cancelled')
+      .order('created_at', { ascending: true });
 
-      if (error) throw error;
+    if (error) throw error;
 
-      const formattedBookings: Booking[] = (data || []).map((item: any) => {
-        return {
-          id: item.id,
-          booking_date: item.booking_date,
-          num_guests: item.num_guests,
-          spot_id: item.spot_id,
-          status: item.status,
-          total_price: item.total_price,
-          booking_category: item.booking_category,
-          guest_first_name: item.guest_first_name,
-          guest_last_name: item.guest_last_name,
-          guest_email: item.guest_email,
-          guest_phone: item.guest_phone,
-          profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles,
-          spots: Array.isArray(item.spots) ? item.spots[0] : item.spots,
-        };
-      });
+    const formattedBookings: Booking[] = (data || []).map((item: any) => {
+      // Gestione ultra-sicura degli oggetti annidati (evita crash se spots o profiles sono null/array)
+      const spotObj = Array.isArray(item.spots) ? item.spots[0] : item.spots;
+      const profileObj = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
+
+      return {
+        id: item.id,
+        booking_date: item.booking_date,
+        num_guests: item.num_guests,
+        spot_id: item.spot_id,
+        status: item.status,
+        total_price: item.total_price,
+        booking_category: item.booking_category,
+        client_name: item.client_name, // Passiamo il campo al componente
+        guest_first_name: item.guest_first_name,
+        guest_last_name: item.guest_last_name,
+        guest_email: item.guest_email,
+        guest_phone: item.guest_phone,
+        profiles: profileObj,
+        spots: spotObj,
+      };
+    });
+
+    setBookings(formattedBookings);
+  } catch (err: any) {
+    console.error("Errore nel recupero delle prenotazioni:", err.message);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
       setBookings(formattedBookings);
     } catch (err: any) {
@@ -194,9 +208,15 @@ export default function AdminDashboardPrenotazioni() {
                     // Priorità 2: Vecchia anagrafica relazionata (profiles) se presente
                     const haDatiDiretti = booking.guest_first_name || booking.guest_last_name;
                     
-                    const nomeCompleto = haDatiDiretti
-                      ? `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`.trim()
-                      : (booking.profiles?.full_name || `${booking.profiles?.first_name || ''} ${booking.profiles?.last_name || ''}`.trim() || 'Bagnante Anonimo');
+                   // 1. Controlla prima se c'è il client_name diretto
+// 2. Altrimenti unisce guest_first_name e guest_last_name
+// 3. Altrimenti passa al profilo collegato
+// 4. Fallback su Bagnante Anonimo
+const nomeCompleto = booking.client_name?.trim() 
+  || `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`.trim()
+  || booking.profiles?.full_name 
+  || `${booking.profiles?.first_name || ''} ${booking.profiles?.last_name || ''}`.trim() 
+  || 'Bagnante Anonimo';
 
                     const emailCliente = haDatiDiretti ? booking.guest_email : booking.profiles?.email;
                     const telefonoCliente = haDatiDiretti ? booking.guest_phone : booking.profiles?.phone;
