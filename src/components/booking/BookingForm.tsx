@@ -7,6 +7,9 @@ export type UserData = {
   email: string;
   numUtenti: number;
   categoria: string;
+  extraSdraio: number;    // Aggiunto per il tracciamento sul DB
+  extraSpiaggine: number;  // Aggiunto per il tracciamento sul DB
+  prezzoExtra: number;     // Utile per passarlo al calcolo del totale complessivo
 };
 
 export default function BookingForm({ onComplete }: { onComplete: (data: UserData) => void }) {
@@ -15,8 +18,41 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
     cognome: '',
     email: '',
     numUtenti: 1,
-    categoria: 'Esercito'
+    categoria: 'Esercito',
+    extraSdraio: 0,
+    extraSpiaggine: 0,
+    prezzoExtra: 0
   });
+
+  const COSTO_PEZZO = 1.50;
+  const MAX_PEZZI = 3;
+
+  // Calcoliamo quanti pezzi totali sono stati selezionati finora
+  const pezziTotali Selezionati = formData.extraSdraio + formData.extraSpiaggine;
+
+  const handleSdraioChange = (valore: number) => {
+    // Verifica che il nuovo totale non superi il limite di 3 pezzi complessivi
+    if (valore + formData.extraSpiaggine <= MAX_PEZZI) {
+      const nuoviPezzi = valore + formData.extraSpiaggine;
+      setFormData({
+        ...formData,
+        extraSdraio: valore,
+        prezzoExtra: nuoviPezzi * COSTO_PEZZO
+      });
+    }
+  };
+
+  const handleSpiaggineChange = (valore: number) => {
+    // Verifica che il nuovo totale non superi il limite di 3 pezzi complessivi
+    if (formData.extraSdraio + valore <= MAX_PEZZI) {
+      const nuoviPezzi = formData.extraSdraio + valore;
+      setFormData({
+        ...formData,
+        extraSpiaggine: valore,
+        prezzoExtra: nuoviPezzi * COSTO_PEZZO
+      });
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +124,55 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
             <option value="Esercito in quiescenza">Esercito in quiescenza</option>
             <option value="Esercito - Parenti">Esercito - Parenti</option>
           </select>
+        </div>
+
+        {/* --- SEZIONE ACCESSORI EXTRA --- */}
+        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Attrezzatura Extra (€1.50/pz)</span>
+            <span className="text-[11px] font-mono font-bold text-slate-500">
+              Scelti: {pezziTotaliSelezionati} / {MAX_PEZZI} Max
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1 ml-1">Sdraio Aggiuntive</label>
+              <select
+                className="w-full p-2.5 rounded-xl bg-white border border-slate-200 outline-none text-slate-900 text-xs font-bold"
+                value={formData.extraSdraio}
+                onChange={(e) => handleSdraioChange(parseInt(e.target.value))}
+              >
+                {[0, 1, 2, 3].map(n => (
+                  <option key={n} value={n} disabled={n + formData.extraSpiaggine > MAX_PEZZI}>
+                    {n} {n === 1 ? 'Sdraio' : 'Sdraio'}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1 ml-1">Spiaggine Aggiuntive</label>
+              <select
+                className="w-full p-2.5 rounded-xl bg-white border border-slate-200 outline-none text-slate-900 text-xs font-bold"
+                value={formData.extraSpiaggine}
+                onChange={(e) => handleSpiaggineChange(parseInt(e.target.value))}
+              >
+                {[0, 1, 2, 3].map(n => (
+                  <option key={n} value={n} disabled={formData.extraSdraio + n > MAX_PEZZI}>
+                    {n} {n === 1 ? 'Spiaggina' : 'Spiaggine'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Feedback visivo del prezzo parziale degli extra */}
+          {formData.prezzoExtra > 0 && (
+            <div className="text-right text-[11px] font-mono font-black text-emerald-600 pt-1">
+              Supplemento attrezzatura: + € {formData.prezzoExtra.toFixed(2)}
+            </div>
+          )}
         </div>
 
         <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition">
