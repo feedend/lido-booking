@@ -20,7 +20,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
     cognome: '',
     email: '',
     numUtenti: 1,
-    categoria: 'Esercito',
+    categoria: 'Esercito', // Valore di default standardizzato
     extraSdraio: 0,
     extraSpiaggine: 0,
     prezzoExtra: 0
@@ -29,7 +29,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
   const COSTO_PEZZO = 1.50;
   const MAX_PEZZI = 3;
 
-  // Calcoliamo i pezzi totali (variabile corretta senza spazi)
+  // Calcoliamo i pezzi totali
   const pezziTotali = formData.extraSdraio + formData.extraSpiaggine;
 
   const handleSdraioChange = (valore: number) => {
