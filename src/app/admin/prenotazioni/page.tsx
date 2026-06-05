@@ -44,77 +44,62 @@ export default function AdminDashboardPrenotazioni() {
   const router = useRouter();
 
  const fetchBookings = async () => {
-    setIsLoading(true);
-    try {
-      // Togliamo il filtro .not('status', 'eq', 'cancelled') direttamente dalla query Supabase 
-      // per evitare conflitti con il tipo ENUM 'booking_status' del database
-      const { data, error } = await supabase
-        .from('bookings')
-        .select(`
-          id,
-          booking_date,
-          num_guests,
-          spot_id,
-          status,
-          total_price,
-          booking_category,
-          client_name,
-          guest_first_name,
-          guest_last_name,
-          guest_email,
-          guest_phone,
-          spots (
-            internal_code
-          ),
-          profiles (
-            full_name,
-            first_name,
-            last_name,
-            email,
-            phone
-          )
-        `)
-        .eq('booking_date', filterDate)
-        .order('created_at', { ascending: true });
+  setIsLoading(true);
+  try {
+    // Prendiamo TUTTI i record di questa specifica data, senza escludere pending o altri stati
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        booking_date,
+        num_guests,
+        spot_id,
+        status,
+        total_price,
+        booking_category,
+        client_name,
+        guest_first_name,
+        guest_last_name,
+        guest_email,
+        guest_phone,
+        spots (
+          internal_code
+        )
+      `)
+      .eq('booking_date', filterDate); // Cerca la data esatta (es. 2026-06-05)
 
-      if (error) throw error;
+    if (error) throw error;
 
-      // Filtriamo i cancellati direttamente in JavaScript per non fare arrabbiare Postgres
-      const activeBookings = (data || []).filter((item: any) => {
-        // Converte lo stato in stringa e verifica che non sia cancellato (adatta la parola se usi l'italiano sul DB)
-        const statoStr = String(item.status).toLowerCase();
-        return statoStr !== 'cancelled' && statoStr !== 'cancellato' && statoStr !== 'annullato';
-      });
+    console.log("Dati grezzi ricevuti dal DB per oggi:", data); // <-- CONTROLLA QUESTO CONSOLE.LOG NELL'ISPEZIONA DEL BROWSER!
 
-      const formattedBookings: Booking[] = activeBookings.map((item: any) => {
-        const spotObj = Array.isArray(item.spots) ? item.spots[0] : item.spots;
-        const profileObj = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
+    const formattedBookings: Booking[] = (data || []).map((item: any) => {
+      const spotObj = Array.isArray(item.spots) ? item.spots[0] : item.spots;
 
-        return {
-          id: item.id,
-          booking_date: item.booking_date,
-          num_guests: item.num_guests,
-          spot_id: item.spot_id,
-          status: item.status,
-          total_price: item.total_price,
-          booking_category: item.booking_category,
-          client_name: item.client_name,
-          guest_first_name: item.guest_first_name,
-          guest_last_name: item.guest_last_name,
-          guest_email: item.guest_email,
-          guest_phone: item.guest_phone,
-          profiles: profileObj,
-          spots: spotObj,
-        };
-      });
+      return {
+        id: item.id,
+        booking_date: item.booking_date,
+        num_guests: item.num_guests || 1,
+        spot_id: item.spot_id,
+        status: item.status,
+        total_price: item.total_price,
+        booking_category: item.booking_category,
+        client_name: item.client_name,
+        guest_first_name: item.guest_first_name,
+        guest_last_name: item.guest_last_name,
+        guest_email: item.guest_email,
+        guest_phone: item.guest_phone,
+        spots: spotObj,
+      };
+    });
 
-      setBookings(formattedBookings);
-    } catch (err: any) {
-      console.error("Errore nel recupero delle prenotazioni:", err.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    setBookings(formattedBookings);
+  } catch (err: any) {
+    console.error("Errore nel recupero delle prenotazioni:", err.message);
+  } finally {
+    setIsLoading(false);
+  }
+};
+  
   useEffect(() => {
     fetchBookings();
   }, [filterDate]);
