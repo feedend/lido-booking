@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
-import { ArrowLeft, RefreshCw, User, Mail, Phone, Umbrella } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Mail, Phone, Umbrella } from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -18,7 +18,7 @@ interface Booking {
   status: string;
   total_price: number | null;
   booking_category: string | null;
-  // Nuovi campi salvati direttamente sulla tabella bookings
+  client_name: string | null;
   guest_first_name: string | null;
   guest_last_name: string | null;
   guest_email: string | null;
@@ -43,72 +43,64 @@ export default function AdminDashboardPrenotazioni() {
   );
   const router = useRouter();
 
- const fetchBookings = async () => {
-  setIsLoading(true);
-  try {
-    // 1. Includiamo esplicitamente client_name nella select
-    const { data, error } = await supabase
-      .from('bookings')
-      .select(`
-        id,
-        booking_date,
-        num_guests,
-        spot_id,
-        status,
-        total_price,
-        booking_category,
-        client_name,
-        guest_first_name,
-        guest_last_name,
-        guest_email,
-        guest_phone,
-        spots (
-          internal_code
-        ),
-        profiles (
-          full_name,
-          first_name,
-          last_name,
-          email,
-          phone
-        )
-      `)
-      .eq('booking_date', filterDate)
-      .not('status', 'eq', 'cancelled')
-      .order('created_at', { ascending: true });
+  const fetchBookings = async () => {
+    setIsLoading(true);
+    try {
+      // Estraiamo tutti i campi diretti dell'anagrafica inclusa client_name e le relazioni relazionate
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          booking_date,
+          num_guests,
+          spot_id,
+          status,
+          total_price,
+          booking_category,
+          client_name,
+          guest_first_name,
+          guest_last_name,
+          guest_email,
+          guest_phone,
+          spots (
+            internal_code
+          ),
+          profiles (
+            full_name,
+            first_name,
+            last_name,
+            email,
+            phone
+          )
+        `)
+        .eq('booking_date', filterDate)
+        .not('status', 'eq', 'cancelled')
+        .order('created_at', { ascending: true });
 
-    if (error) throw error;
+      if (error) throw error;
 
-    const formattedBookings: Booking[] = (data || []).map((item: any) => {
-      // Gestione ultra-sicura degli oggetti annidati (evita crash se spots o profiles sono null/array)
-      const spotObj = Array.isArray(item.spots) ? item.spots[0] : item.spots;
-      const profileObj = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
+      const formattedBookings: Booking[] = (data || []).map((item: any) => {
+        // Gestione di sicurezza nel caso in cui spots o profiles rispondano come array o null
+        const spotObj = Array.isArray(item.spots) ? item.spots[0] : item.spots;
+        const profileObj = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
 
-      return {
-        id: item.id,
-        booking_date: item.booking_date,
-        num_guests: item.num_guests,
-        spot_id: item.spot_id,
-        status: item.status,
-        total_price: item.total_price,
-        booking_category: item.booking_category,
-        client_name: item.client_name, // Passiamo il campo al componente
-        guest_first_name: item.guest_first_name,
-        guest_last_name: item.guest_last_name,
-        guest_email: item.guest_email,
-        guest_phone: item.guest_phone,
-        profiles: profileObj,
-        spots: spotObj,
-      };
-    });
-
-    setBookings(formattedBookings);
-  } catch (err: any) {
-    console.error("Errore nel recupero delle prenotazioni:", err.message);
-  } finally {
-    setIsLoading(false);
-  }
-};
+        return {
+          id: item.id,
+          booking_date: item.booking_date,
+          num_guests: item.num_guests,
+          spot_id: item.spot_id,
+          status: item.status,
+          total_price: item.total_price,
+          booking_category: item.booking_category,
+          client_name: item.client_name,
+          guest_first_name: item.guest_first_name,
+          guest_last_name: item.guest_last_name,
+          guest_email: item.guest_email,
+          guest_phone: item.guest_phone,
+          profiles: profileObj,
+          spots: spotObj,
+        };
+      });
 
       setBookings(formattedBookings);
     } catch (err: any) {
@@ -122,8 +114,25 @@ export default function AdminDashboardPrenotazioni() {
     fetchBookings();
   }, [filterDate]);
 
-  const incassoTotale = bookings.reduce((acc, curr) => acc + (curr.total_price || 0), 0);
-  const totalePresenze = bookings.reduce((acc, curr) => acc + (curr.num_guests || 1), 0);
+  // --- CALCOLI STATISTICHE CARD (Escludendo i blocchi manuali/strutturali dalle metriche reali) ---
+  const incassoTotale = bookings.reduce((acc, curr) => {
+    if (curr.booking_category?.toLowerCase().includes('blocco') || curr.status === 'blocked') {
+      return acc;
+    }
+    return acc + (curr.total_price || 0);
+  }, 0);
+
+  const ombrelloniOccupatiReali = bookings.filter(b => {
+    const isBlocco = b.booking_category?.toLowerCase().includes('blocco') || b.status === 'blocked';
+    return !isBlocco;
+  }).length;
+
+  const totalePresenze = bookings.reduce((acc, curr) => {
+    if (curr.booking_category?.toLowerCase().includes('blocco') || curr.status === 'blocked') {
+      return acc;
+    }
+    return acc + (curr.num_guests || 1);
+  }, 0);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 font-sans">
@@ -159,7 +168,7 @@ export default function AdminDashboardPrenotazioni() {
 
         {/* Informative Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-lg relative overflow-hidden group">
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-lg relative overflow-hidden">
             <span className="text-[10px] uppercase font-black text-slate-500 tracking-widest block">Incasso del Giorno</span>
             <div className="text-2xl font-black text-emerald-400 mt-1 font-mono">€ {incassoTotale.toFixed(2)}</div>
             <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
@@ -167,7 +176,9 @@ export default function AdminDashboardPrenotazioni() {
           
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-lg">
             <span className="text-[10px] uppercase font-black text-slate-500 tracking-widest block">Ombrelloni Occupati</span>
-            <div className="text-2xl font-black text-white mt-1 font-mono">{bookings.length} <span className="text-xs text-slate-500 font-normal">/ 174</span></div>
+            <div className="text-2xl font-black text-white mt-1 font-mono">
+              {ombrelloniOccupatiReali} <span className="text-xs text-slate-500 font-normal">/ 169 Reali</span>
+            </div>
           </div>
           
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-lg">
@@ -204,20 +215,14 @@ export default function AdminDashboardPrenotazioni() {
                 <tbody className="divide-y divide-slate-850 bg-slate-900/40">
                   {bookings.map((booking) => {
                     
-                    // Priorità 1: Nuova anagrafica diretta (guest_*) salvata senza account
-                    // Priorità 2: Vecchia anagrafica relazionata (profiles) se presente
-                    const haDatiDiretti = booking.guest_first_name || booking.guest_last_name;
-                    
-                   // 1. Controlla prima se c'è il client_name diretto
-// 2. Altrimenti unisce guest_first_name e guest_last_name
-// 3. Altrimenti passa al profilo collegato
-// 4. Fallback su Bagnante Anonimo
-const nomeCompleto = booking.client_name?.trim() 
-  || `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`.trim()
-  || booking.profiles?.full_name 
-  || `${booking.profiles?.first_name || ''} ${booking.profiles?.last_name || ''}`.trim() 
-  || 'Bagnante Anonimo';
+                    // Logica a cascata per estrarre l'anagrafica corretta da qualsiasi campo compilato
+                    const nomeCompleto = booking.client_name?.trim() 
+                      || `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`.trim()
+                      || booking.profiles?.full_name 
+                      || `${booking.profiles?.first_name || ''} ${booking.profiles?.last_name || ''}`.trim() 
+                      || 'Bagnante Anonimo';
 
+                    const haDatiDiretti = booking.guest_first_name || booking.guest_last_name || booking.guest_email;
                     const emailCliente = haDatiDiretti ? booking.guest_email : booking.profiles?.email;
                     const telefonoCliente = haDatiDiretti ? booking.guest_phone : booking.profiles?.phone;
 
@@ -231,7 +236,7 @@ const nomeCompleto = booking.client_name?.trim()
                           </span>
                         </td>
                         
-                        {/* Nome Cognome */}
+                        {/* Nome e Cognome */}
                         <td className="px-6 py-4 font-bold text-white tracking-wide">
                           <span className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-blue-500/40 shrink-0" />
@@ -239,7 +244,7 @@ const nomeCompleto = booking.client_name?.trim()
                           </span>
                         </td>
                         
-                        {/* Email e Telefono */}
+                        {/* Contatti */}
                         <td className="px-6 py-4 font-mono text-slate-400 space-y-0.5">
                           {emailCliente && (
                             <div className="flex items-center gap-1 text-[11px]">
@@ -256,7 +261,7 @@ const nomeCompleto = booking.client_name?.trim()
                           )}
                         </td>
                         
-                        {/* Categoria Tariffa */}
+                        {/* Categoria / Tariffa */}
                         <td className="px-6 py-4">
                           <span className="px-2 py-0.5 text-[10px] bg-slate-950 text-slate-400 border border-slate-800 rounded-lg font-black uppercase tracking-wider">
                             {booking.booking_category || 'Standard'}
@@ -279,7 +284,7 @@ const nomeCompleto = booking.client_name?.trim()
                           </span>
                         </td>
                         
-                        {/* Prezzo Finale */}
+                        {/* Prezzo */}
                         <td className="px-6 py-4 text-right font-mono font-black text-white text-sm">
                           € {(booking.total_price || 0).toFixed(2)}
                         </td>
