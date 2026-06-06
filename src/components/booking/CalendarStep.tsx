@@ -1,47 +1,56 @@
-'use client';
-import React from 'react';
+use client';
+import React, { useState } from 'react';
 
-type CalendarStepProps = {
+type CalendarProps = {
   categoria: string;
   onDateSelect: (date: string) => void;
 };
 
-export default function CalendarStep({ categoria, onDateSelect }: CalendarStepProps) {
-  const oggiIso = new Date().toISOString().split('T')[0];
-  const isGiornaliero = categoria.toLowerCase() === 'giornaliero';
-
-  const handleSelezionaOggi = () => {
-    onDateSelect(oggiIso);
+export default function CalendarStep({ categoria, onDateSelect }: CalendarProps) {
+  const today = new Date();
+  
+  // Calcolo del limite giorni in base alla categoria
+  const getDaysAhead = (cat: string) => {
+    switch (cat) {
+      case 'Esercito': return 7;
+      case 'Esercito in quiescenza': return 5;
+      case 'Altra Forza Armata': return 1;
+      case 'Esercito - Parenti': return 1;
+      default: return 0;
+    }
   };
 
+  const daysAhead = getDaysAhead(categoria);
+  const maxDate = new Date();
+  maxDate.setDate(today.getDate() + daysAhead);
+
+  // Formattazione per l'input date (YYYY-MM-DD)
+  const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
   return (
-    <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-blue-50 text-slate-800 text-center">
-      <h3 className="text-xl font-bold text-blue-900 mb-2 uppercase tracking-tight">Seleziona la Data</h3>
+    <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-blue-50 text-center">
+      <div className="mb-6">
+        <span className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase">
+          Priorità: {daysAhead} {daysAhead === 1 ? 'Giorno' : 'Giorni'}
+        </span>
+      </div>
       
-      {isGiornaliero ? (
-        <div className="py-6 space-y-4">
-          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-900">
-            Hai selezionato la tariffa <strong>Giornaliero</strong>. Questa tipologia permette la prenotazione esclusivamente per la giornata di oggi.
-          </div>
-          
-          <button
-            onClick={handleSelezionaOggi}
-            className="w-full bg-gradient-to-r from-blue-600 to-sky-600 text-white font-black py-4 px-6 rounded-xl shadow-md text-sm uppercase tracking-wider hover:from-blue-700 hover:to-sky-700 transition"
-          >
-            Prenota per Oggi ({new Date().toLocaleDateString('it-IT')})
-          </button>
-        </div>
-      ) : (
-        <div className="py-6 space-y-4">
-          <p className="text-xs text-slate-500">Scegli il giorno della tua prenotazione:</p>
-          <input 
-            type="date"
-            min={oggiIso}
-            onChange={(e) => e.target.value && onDateSelect(e.target.value)}
-            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-bold outline-none text-sm text-center focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-      )}
+      <h2 className="text-xl font-bold text-slate-800 mb-2">Seleziona la Data</h2>
+      <p className="text-sm text-slate-500 mb-6">
+        In base alla tua categoria, puoi prenotare fino al {maxDate.toLocaleDateString('it-IT')}
+      </p>
+
+      <input 
+        type="date"
+        min={formatDate(today)}
+        max={formatDate(maxDate)}
+        className="w-full p-4 rounded-xl bg-slate-50 border-2 border-blue-100 focus:border-blue-500 outline-none text-lg font-medium mb-6"
+        onChange={(e) => onDateSelect(e.target.value)}
+      />
+
+      <div className="text-[10px] text-slate-400 uppercase tracking-tighter">
+        Sistema di prenotazione anticipata - Stabilimento Balneare Santa Severa
+      </div>
     </div>
   );
 }
