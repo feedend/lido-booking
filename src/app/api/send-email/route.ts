@@ -1,11 +1,19 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
+    // Spostando l'inizializzazione qui dentro, proteggi la build se la chiave manca nell'ambiente di compilazione
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      console.error("⚠️ RESEND_API_KEY non configurata nelle variabili d'ambiente.");
+      return NextResponse.json({ success: false, error: "Configurazione server incompleta." }, { status: 500 });
+    }
+
+    const resend = new Resend(apiKey);
+
     const body = await request.json();
     const { email, nome, cognome, data, ombrellone, prezzo, utenti, categoria } = body;
 
@@ -45,7 +53,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, data: emailResponse });
- } catch (error: any) {
+  } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
