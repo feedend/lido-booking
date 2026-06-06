@@ -80,14 +80,15 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     const quotaBaseSdraio = 1.5; 
     
    let supplementoPersona = 0.0;
-// Usiamo 'categoria' invece di 'cat' per normalizzare la stringa
-const catLower = categoria.toLowerCase().trim();
+// Normalizziamo la stringa originale per evitare problemi di maiuscole o spazi
+const catLower = cat ? cat.toLowerCase().trim() : '';
 
 if (catLower.includes('parenti')) {
   supplementoPersona = 1.5;
 } else if (catLower === 'esercito') {
   supplementoPersona = 1.5;
 } else if (catLower.includes('altra forza armata')) {
+  // CORRETTO: Spostato fuori dal blocco esercito e impostato a 3.5
   supplementoPersona = 3.5;
 } else if (catLower.includes('quiescenza')) {
   supplementoPersona = 3.5;
