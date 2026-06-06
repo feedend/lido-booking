@@ -73,28 +73,27 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     loadBeachData();
   }, [selectedDate]);
 
-  // Calcolo dinamico del prezzo basato sulle tariffe ufficiali + supplementi extra
+// Calcolo dinamico del prezzo basato sulle tariffe ufficiali + supplementi extra
   const calcolaPrezzoTotale = () => {
     // Punto 2: Ogni prenotazione include di base l'ombrellone (2€) e la prima sdraio (1.50€)
     const quotaBaseOmbrellone = 2.0;
     const quotaBaseSdraio = 1.5; 
     
-   let supplementoPersona = 0.0;
-// Normalizziamo la stringa originale per evitare problemi di maiuscole o spazi
-const catLower = cat ? cat.toLowerCase().trim() : '';
+    let supplementoPersona = 0.0;
+    // FISSARE QUI: Usiamo userData.categoria invece del vecchio cat che non esiste
+    const catLower = userData.categoria ? userData.categoria.toLowerCase().trim() : '';
 
-if (catLower.includes('parenti')) {
-  supplementoPersona = 1.5;
-} else if (catLower === 'esercito') {
-  supplementoPersona = 1.5;
-} else if (catLower.includes('altra forza armata')) {
-  // CORRETTO: Spostato fuori dal blocco esercito e impostato a 3.5
-  supplementoPersona = 3.5;
-} else if (catLower.includes('quiescenza')) {
-  supplementoPersona = 3.5;
-} else if (catLower === 'giornaliero') {
-  supplementoPersona = 3.5;
-}
+    if (catLower.includes('parenti')) {
+      supplementoPersona = 1.5;
+    } else if (catLower === 'esercito') {
+      supplementoPersona = 1.5;
+    } else if (catLower.includes('altra forza armata')) {
+      supplementoPersona = 3.5;
+    } else if (catLower.includes('quiescenza')) {
+      supplementoPersona = 3.5;
+    } else if (catLower === 'giornaliero') {
+      supplementoPersona = 3.5;
+    }
     
     // Struttura finale del costo: Base fissa + (Persone * Tariffa) + Attrezzatura extra ordinata dal form
     const costoStrutturaBase = quotaBaseOmbrellone + quotaBaseSdraio;
