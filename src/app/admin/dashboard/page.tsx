@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { LayoutGrid, ClipboardList, LogOut, Shield, User } from 'lucide-react';
-import BeachMap from '@/components/map/BeachMap'; 
+import BeachMap from '@/components/map/BeachMap'; // Il componente della mappa che abbiamo sistemato
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,12 +15,6 @@ export default function DashboardPage() {
   const [ruolo, setRuolo] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tabAttiva, setTabAttiva] = useState<'spiaggia' | 'registro'>('spiaggia');
-  
-  // Gestione data per la mappa all'interno del pannello di controllo
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0] // Di base parte con la data di oggi
-  );
-  
   const router = useRouter();
 
   useEffect(() => {
@@ -32,15 +26,10 @@ export default function DashboardPage() {
         return;
       }
 
-      // 1. Lettura dei ruoli compatibile al 100% con TypeScript
+      // Lettura dei ruoli pulita e sicura per TypeScript (evita il blocco su Vercel)
       const ruoloUtente = user.user_metadata?.ruolo || user.app_metadata?.ruolo;
 
-      // 2. Se è un operatore, blocca la visualizzazione solo sulla spiaggia
-      if (ruoloUtente === 'operators') {
-        setTabAttiva('spiaggia');
-      }
-
-      // Sicurezza: se non ha un ruolo valido, esegui il logout automatico
+      // Sicurezza: se non c'è ruolo o non è valido, rimanda al login
       if (ruoloUtente !== 'admin' && ruoloUtente !== 'operators') {
         await supabase.auth.signOut();
         router.push('/login');
@@ -104,7 +93,7 @@ export default function DashboardPage() {
               <span>Gestione Spiaggia</span>
             </button>
 
-            {/* PULSANTE REGISTRO — Logica Condizionale: Visibile SOLO se admin */}
+            {/* PULSANTE REGISTRO — Mostrato solo se l'utente è ADMIN */}
             {ruolo === 'admin' && (
               <button
                 onClick={() => setTabAttiva('registro')}
@@ -135,39 +124,14 @@ export default function DashboardPage() {
       <main className="flex-1 p-6 md:p-10 overflow-y-auto">
         {tabAttiva === 'spiaggia' && (
           <div className="space-y-4">
-            <div className="border-b border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-white">Mappa degli Ombrelloni</h1>
-                <p className="text-sm text-slate-400">Monitora e gestisci le postazioni in tempo reale sul lido.</p>
-              </div>
-              
-              {/* Controllo della data per permettere ai cassieri/operatori di cambiare giorno */}
-              <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 p-2 rounded-xl">
-                <span className="text-xs font-bold text-slate-400 uppercase pl-2">Giorno:</span>
-                <input 
-                  type="date" 
-                  value={selectedDate}
-                  onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
-                  className="bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-xs font-bold text-white outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
+            <div className="border-b border-slate-800 pb-4">
+              <h1 className="text-2xl font-bold tracking-tight text-white">Mappa degli Ombrelloni</h1>
+              <p className="text-sm text-slate-400">Monitora e gestisci le postazioni in tempo reale sul lido.</p>
             </div>
             
-            {/* Componente della mappa spiaggia — Passiamo i dati fittizi di controllo per non rompere il tipo */}
+            {/* Componente della mappa spiaggia (Inalterato) */}
             <div className="mt-6 bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <BeachMap 
-                selectedDate={selectedDate} 
-                userData={{
-                  nome: 'OPERATORE',
-                  cognome: 'LIDO',
-                  email: 'interno@stabilimento.it',
-                  numUtenti: 1,
-                  categoria: ruolo === 'admin' ? 'admin' : 'operators',
-                  extraSdraio: 0,
-                  extraSpiaggine: 0,
-                  prezzoExtra: 0
-                }} 
-              />
+              <BeachMap />
             </div>
           </div>
         )}
