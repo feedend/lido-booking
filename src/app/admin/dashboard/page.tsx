@@ -249,7 +249,7 @@ export default function AdminDashboard() {
             </button>
           ) : (
             <button 
-              onClick={() => router.push('/admin/dashboard/operatordashboard')}
+              onClick={() => router.push('/admin/dashboard/opdashboard')}
               className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white border border-transparent rounded-xl transition shadow-lg shadow-sky-600/20"
             >
               <QrCode className="h-4 w-4" /> Scanner QR
