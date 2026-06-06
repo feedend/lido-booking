@@ -13,7 +13,8 @@ import {
   ShieldAlert,
   Umbrella,
   User,
-  Shield
+  Shield,
+  QrCode // Aggiunta icona per lo scanner
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -238,18 +239,22 @@ export default function AdminDashboard() {
             />
           </div>
 
-          {/* PULSANTE REGISTRO — Offuscato, barrato e disabilitato se è operatore */}
-          <button 
-            disabled={ruolo !== 'admin'}
-            onClick={() => router.push('/admin/prenotazioni')}
-            className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl transition border ${
-              ruolo !== 'admin'
-                ? 'bg-slate-900/40 border-slate-800/50 text-slate-600 line-through opacity-40 cursor-not-allowed'
-                : 'bg-slate-800 hover:bg-slate-700 text-white border-transparent'
-            }`}
-          >
-            <FileText className="h-4 w-4" /> Registro
-          </button>
+          {/* PULSANTE DINAMICO — Carica il Registro per Admin o lo Scanner per Operatori */}
+          {ruolo === 'admin' ? (
+            <button 
+              onClick={() => router.push('/admin/prenotazioni')}
+              className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white border border-transparent rounded-xl transition"
+            >
+              <FileText className="h-4 w-4" /> Registro
+            </button>
+          ) : (
+            <button 
+              onClick={() => router.push('/admin/dashboard/operatordashboard')}
+              className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white border border-transparent rounded-xl transition shadow-lg shadow-sky-600/20"
+            >
+              <QrCode className="h-4 w-4" /> Scanner QR
+            </button>
+          )}
 
           <button 
             onClick={async () => { await supabase.auth.signOut(); router.push('/admin/login'); }}
