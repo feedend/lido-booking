@@ -1,5 +1,5 @@
-use client';
-import React, { useState } from 'react';
+'use client';
+import React from 'react';
 
 type CalendarProps = {
   categoria: string;
@@ -7,8 +7,13 @@ type CalendarProps = {
 };
 
 export default function CalendarStep({ categoria, onDateSelect }: CalendarProps) {
+  // Calcolo della data odierna locale (senza sballare con ISOString e fusi orari)
   const today = new Date();
-  
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const minDateStr = `${yyyy}-${mm}-${dd}`;
+
   // Calcolo del limite giorni in base alla categoria
   const getDaysAhead = (cat: string) => {
     switch (cat) {
@@ -16,16 +21,20 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
       case 'Esercito in quiescenza': return 5;
       case 'Altra Forza Armata': return 1;
       case 'Esercito - Parenti': return 1;
-      default: return 0;
+      default: return 0; // Dipendenti civili o prenotazione solo giorno stesso se non mappati
     }
   };
 
   const daysAhead = getDaysAhead(categoria);
+  
+  // Calcolo della data massima consentita localmente
   const maxDate = new Date();
   maxDate.setDate(today.getDate() + daysAhead);
-
-  // Formattazione per l'input date (YYYY-MM-DD)
-  const formatDate = (d: Date) => d.toISOString().split('T')[0];
+  
+  const maxYear = maxDate.getFullYear();
+  const maxMonth = String(maxDate.getMonth() + 1).padStart(2, '0');
+  const maxDay = String(maxDate.getDate()).padStart(2, '0');
+  const maxDateStr = `${maxYear}-${maxMonth}-${maxDay}`;
 
   return (
     <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-blue-50 text-center">
@@ -37,14 +46,14 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
       
       <h2 className="text-xl font-bold text-slate-800 mb-2">Seleziona la Data</h2>
       <p className="text-sm text-slate-500 mb-6">
-        In base alla tua categoria, puoi prenotare fino al {maxDate.toLocaleDateString('it-IT')}
+        In base alla categoria <span className="font-semibold text-blue-600">"{categoria}"</span>, puoi prenotare fino al {maxDate.toLocaleDateString('it-IT')}
       </p>
 
       <input 
         type="date"
-        min={formatDate(today)}
-        max={formatDate(maxDate)}
-        className="w-full p-4 rounded-xl bg-slate-50 border-2 border-blue-100 focus:border-blue-500 outline-none text-lg font-medium mb-6"
+        min={minDateStr}
+        max={maxDateStr}
+        className="w-full p-4 rounded-xl bg-slate-50 border-2 border-blue-100 focus:border-blue-500 outline-none text-lg font-medium mb-6 text-slate-800 cursor-pointer"
         onChange={(e) => onDateSelect(e.target.value)}
       />
 
