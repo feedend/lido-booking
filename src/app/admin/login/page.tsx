@@ -1,162 +1,148 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LayoutGrid, ClipboardList, LogOut, Shield, User } from 'lucide-react';
-import BeachMap from '@/components/map/BeachMap'; // Il componente della mappa che abbiamo sistemato
+import { createClient } from '@supabase/supabase-js';
+import { Lock, Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-export default function DashboardPage() {
-  const [ruolo, setRuolo] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [tabAttiva, setTabAttiva] = useState<'spiaggia' | 'registro'>('spiaggia');
+export default function AdminLogin() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-useEffect(() => {
-  const controllaSessione = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
 
-    if (!user) {
-      router.push('/login');
-      return;
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) throw authError;
+
+      if (data?.user) {
+        // Recuperiamo il ruolo dai metadati dell'utente configurati su Supabase
+        const ruolo = data.user.user_metadata?.ruolo;
+
+        if (ruolo === 'admin') {
+          // Reindirizzamento per l'amministratore totale
+          router.push('/admin/dashboard');
+        } else if (ruolo === 'operators') {
+          // Reindirizzamento per il personale e i gestori operativi del lido
+          router.push('/operator/dashboard');
+        } else {
+          // Protezione: se un utente normale prova a loggarsi da qui, lo buttiamo fuori
+          await supabase.auth.signOut();
+          setError('Accesso negato: non hai i permessi necessari per accedere a questa area.');
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'Email o password errate. Riprova.');
+    } finally {
+      setLoading(false);
     }
-
-    // Stampiamo l'utente in console per vedere esattamente dove si nasconde il ruolo durante il test
-    console.log("Utente Loggato:", user);
-
-    // Controlliamo tutte le possibili posizioni dei metadati di Supabase
-    const ruoloUtente = 
-      user.user_metadata?.ruolo || 
-      user.app_metadata?.ruolo || 
-      user.raw_user_meta_data?.ruolo;
-
-    // Sicurezza: se non c'è ruolo o non è valido, rimanda al login
-    if (ruoloUtente !== 'admin' && ruoloUtente !== 'operators') {
-      await supabase.auth.signOut();
-      router.push('/login');
-      return;
-    }
-
-    setRuolo(ruoloUtente);
-    setLoading(false);
   };
-
-  controllaSessione();
-}, [router]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
-        <p className="text-sm font-medium tracking-wide animate-pulse">Caricamento pannello...</p>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row">
-      
-      {/* SIDEBAR DI NAVIGAZIONE */}
-      <aside className="w-full md:w-64 bg-slate-900 border-b md:border-b-0 md:border-r border-slate-800 p-6 flex flex-col justify-between">
-        <div className="space-y-6">
-          <div>
-            <h2 className="text-xl font-black text-white tracking-tight">Lido Control Panel</h2>
-            <div className="flex items-center gap-1.5 mt-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              {ruolo === 'admin' ? (
-                <>
-                  <Shield className="h-3.5 w-3.5 text-amber-500" />
-                  <span>Amministratore</span>
-                </>
-              ) : (
-                <>
-                  <User className="h-3.5 w-3.5 text-blue-400" />
-                  <span>Operatore</span>
-                </>
-              )}
-            </div>
-          </div>
-
-          <nav className="space-y-2">
-            {/* Pulsante Spiaggia - Visibile a TUTTI */}
-            <button
-              onClick={() => setTabAttiva('spiaggia')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
-                tabAttiva === 'spiaggia'
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-              }`}
-            >
-              <LayoutGrid className="h-5 w-5" />
-              <span>Gestione Spiaggia</span>
-            </button>
-
-            {/* PULSANTE REGISTRO — Logica Condizionale: Visibile SOLO se admin */}
-            {ruolo === 'admin' && (
-              <button
-                onClick={() => setTabAttiva('registro')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
-                  tabAttiva === 'registro'
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                }`}
-              >
-                <ClipboardList className="h-5 w-5" />
-                <span>Registro Prenotazioni</span>
-              </button>
-            )}
-          </nav>
+    <div className="min-h-screen bg-slate-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto w-full sm:max-w-md">
+        <div className="text-center">
+          <h2 className="text-3xl font-extrabold text-white tracking-tight">
+            Lido Control Panel
+          </h2>
+          <p className="mt-2 text-sm text-slate-400">
+            Area riservata alla gestione dello stabilimento
+          </p>
         </div>
+      </div>
 
-        {/* Pulsante di Disconnessione */}
-        <button
-          onClick={handleLogout}
-          className="mt-8 w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-red-400 hover:bg-red-500/10 transition-colors border border-transparent hover:border-red-500/20"
-        >
-          <LogOut className="h-5 w-5" />
-          <span>Esci dal sistema</span>
-        </button>
-      </aside>
-
-      {/* CONTENUTO PRINCIPALE DELLA DASHBOARD */}
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto">
-        {tabAttiva === 'spiaggia' && (
-          <div className="space-y-4">
-            <div className="border-b border-slate-800 pb-4">
-              <h1 className="text-2xl font-bold tracking-tight text-white">Mappa degli Ombrelloni</h1>
-              <p className="text-sm text-slate-400">Monitora e gestisci le postazioni in tempo reale sul lido.</p>
-            </div>
+      <div className="mt-8 sm:mx-auto w-full sm:max-w-md">
+        <div className="bg-slate-800 py-8 px-4 shadow-xl rounded-xl sm:px-10 border border-slate-700 mx-4 sm:mx-0">
+          <form className="space-y-6" onSubmit={handleLogin}>
             
-            {/* Componente della mappa spiaggia */}
-            <div className="mt-6 bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <BeachMap />
-            </div>
-          </div>
-        )}
+            {/* Messaggio di Errore */}
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-3 rounded-lg flex items-center gap-2 text-sm">
+                <AlertCircle className="h-5 w-5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
-        {/* Renderizzato solo se admin seleziona il registro */}
-        {tabAttiva === 'registro' && ruolo === 'admin' && (
-          <div className="space-y-4">
-            <div className="border-b border-slate-800 pb-4">
-              <h1 className="text-2xl font-bold tracking-tight text-white">Registro Storico Prenotazioni</h1>
-              <p className="text-sm text-slate-400">Visualizza i dettagli finanziari, i dati degli utenti ed esporta i resoconti.</p>
+            {/* Input Email */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-slate-300">
+                Indirizzo Email
+              </label>
+              <div className="mt-1 relative rounded-md shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                  <Mail className="h-5 w-5" />
+                </div>
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  placeholder="admin@lidosantasevera.it"
+                  disabled={loading}
+                />
+              </div>
             </div>
-            
-            {/* Qui andrà la tabella con l'elenco di tutte le prenotazioni */}
-            <div className="mt-6 bg-slate-900 border border-slate-800 rounded-2xl p-6 text-slate-400 text-sm">
-              Tabella del registro prenotazioni, incassi complessivi e filtri avanzati.
+
+            {/* Input Password */}
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-slate-300">
+                Password
+              </label>
+              <div className="mt-1 relative rounded-md shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="block w-full pl-10 pr-10 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  placeholder="••••••••"
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-300 focus:outline-none"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-      </main>
+
+            {/* Pulsante di Invio */}
+            <div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? 'Verifica credenziali...' : 'Accedi al Gestionale'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
