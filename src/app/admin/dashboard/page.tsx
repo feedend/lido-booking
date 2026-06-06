@@ -26,7 +26,7 @@ export default function DashboardPage() {
         return;
       }
 
-      // Lettura dei ruoli pulita e sicura per TypeScript (evita il blocco su Vercel)
+      // Lettura sicura del ruolo per TypeScript (evita il blocco su Vercel)
       const ruoloUtente = user.user_metadata?.ruolo || user.app_metadata?.ruolo;
 
       // Sicurezza: se non c'è ruolo o non è valido, rimanda al login
@@ -80,7 +80,7 @@ export default function DashboardPage() {
           </div>
 
           <nav className="space-y-2">
-            {/* Pulsante Spiaggia - Visibile a TUTTI */}
+            {/* Pulsante Spiaggia - Visibile e attivo per TUTTI */}
             <button
               onClick={() => setTabAttiva('spiaggia')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
@@ -93,20 +93,21 @@ export default function DashboardPage() {
               <span>Gestione Spiaggia</span>
             </button>
 
-            {/* PULSANTE REGISTRO — Mostrato solo se l'utente è ADMIN */}
-            {ruolo === 'admin' && (
-              <button
-                onClick={() => setTabAttiva('registro')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
-                  tabAttiva === 'registro'
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                }`}
-              >
-                <ClipboardList className="h-5 w-5" />
-                <span>Registro Prenotazioni</span>
-              </button>
-            )}
+            {/* PULSANTE REGISTRO — Offuscato e disabilitato se è operatore */}
+            <button
+              disabled={ruolo !== 'admin'}
+              onClick={() => setTabAttiva('registro')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all ${
+                ruolo !== 'admin'
+                  ? 'opacity-40 cursor-not-allowed text-slate-500 line-through' // Stile offuscato/disabilitato
+                  : tabAttiva === 'registro'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <ClipboardList className="h-5 w-5" />
+              <span>Registro Prenotazioni</span>
+            </button>
           </nav>
         </div>
 
@@ -129,7 +130,7 @@ export default function DashboardPage() {
               <p className="text-sm text-slate-400">Monitora e gestisci le postazioni in tempo reale sul lido.</p>
             </div>
             
-            {/* Componente della mappa spiaggia (Inalterato) */}
+            {/* Componente della mappa spiaggia (Totalmente Inalterato) */}
             <div className="mt-6 bg-slate-900 border border-slate-800 rounded-2xl p-6">
               <BeachMap />
             </div>
