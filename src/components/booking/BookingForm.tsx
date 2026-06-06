@@ -9,7 +9,6 @@ export type UserData = {
   email: string;
   numUtenti: number;
   categoria: string;
-  telefono?: string;
   extraSdraio: number;    
   extraSpiaggine: number;  
   prezzoExtra: number;     
@@ -22,7 +21,6 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
     email: '',
     numUtenti: 1,
     categoria: 'Esercito',
-    telefono: '',
     extraSdraio: 0,
     extraSpiaggine: 0,
     prezzoExtra: 0
@@ -62,8 +60,18 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
 
   return (
     <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-blue-50 text-slate-800">
-      <h2 className="text-2xl font-bold text-blue-900 mb-6 text-center">Registrazione</h2>
+      <h2 className="text-2xl font-bold text-blue-900 mb-5 text-center">Registrazione</h2>
       
+      {/* Box Informativo sulle dotazioni di Base richieste dal punto 2 */}
+      <div className="mb-6 p-4 bg-blue-50/70 border border-blue-100 rounded-2xl text-xs text-blue-950 space-y-1">
+        <p className="font-bold uppercase tracking-wide text-[10px] text-blue-800">Incluso nella prenotazione di base:</p>
+        <p>• 1 Postazione Ombrellone (€2.00)</p>
+        <p>• 1 Sdraio Standard (€1.50)</p>
+        <p className="text-slate-500 mt-1 pt-1 border-t border-blue-200/40">
+          Il prezzo finale includerà la quota base sopra indicata + il supplemento per ogni componente in base alla categoria selezionata.
+        </p>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -72,7 +80,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
               required
               placeholder="Nome"
               value={formData.nome}
-              className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
+              className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 text-sm"
               type="text" 
               onChange={(e) => setFormData({...formData, nome: e.target.value})}
             />
@@ -83,7 +91,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
               required
               placeholder="Cognome"
               value={formData.cognome}
-              className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
+              className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 text-sm"
               type="text" 
               onChange={(e) => setFormData({...formData, cognome: e.target.value})}
             />
@@ -96,27 +104,16 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
             required
             placeholder="esempio@email.com"
             value={formData.email}
-            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
+            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 text-sm"
             type="email" 
             onChange={(e) => setFormData({...formData, email: e.target.value})}
           />
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Telefono (Opzionale)</label>
-          <input 
-            placeholder="3331234567"
-            value={formData.telefono}
-            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-            type="tel" 
-            onChange={(e) => setFormData({...formData, telefono: e.target.value})}
-          />
-        </div>
-
-        <div>
           <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Componenti Nucleo (Max 4)</label>
           <select 
-            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none bg-slate-50 text-slate-900"
+            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-slate-900 text-sm"
             value={formData.numUtenti}
             onChange={(e) => setFormData({...formData, numUtenti: parseInt(e.target.value)})}
           >
@@ -125,9 +122,9 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Categoria</label>
+          <label className="block text-xs font-semibold text-slate-500 mb-1 ml-1">Categoria / Tariffa</label>
           <select 
-            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none bg-slate-50 text-slate-900"
+            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-slate-900 text-sm"
             value={formData.categoria}
             onChange={(e) => setFormData({...formData, categoria: e.target.value})}
           >
@@ -135,6 +132,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
             <option value="Altra Forza Armata">Altra Forza Armata</option>
             <option value="Esercito in quiescenza">Esercito in quiescenza</option>
             <option value="Esercito - Parenti">Esercito - Parenti</option>
+            <option value="Giornaliero">Giornaliero (Solo Oggi)</option>
           </select>
         </div>
 
@@ -179,7 +177,6 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
             </div>
           </div>
 
-          {/* Cifra parziale degli accessori */}
           {formData.prezzoExtra > 0 && (
             <div className="text-right text-[11px] font-mono font-black text-emerald-600 pt-1">
               Supplemento attrezzatura: + € {formData.prezzoExtra.toFixed(2)}
@@ -187,7 +184,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
           )}
         </div>
 
-        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition">
+        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition text-sm">
           Continua
         </button>
       </form>
