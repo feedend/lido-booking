@@ -73,14 +73,13 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     loadBeachData();
   }, [selectedDate]);
 
-// Calcolo dinamico del prezzo basato sulle tariffe ufficiali + supplementi extra
+  // Calcolo dinamico del prezzo basato sulle tariffe ufficiali + supplementi extra
   const calcolaPrezzoTotale = () => {
-    // Punto 2: Ogni prenotazione include di base l'ombrellone (2€) e la prima sdraio (1.50€)
     const quotaBaseOmbrellone = 2.0;
     const quotaBaseSdraio = 1.5; 
     
     let supplementoPersona = 0.0;
-    // FISSARE QUI: Usiamo userData.categoria invece del vecchio cat che non esiste
+    // RISOLTO BUG DI COMPILAZIONE: Legge correttamente da userData.categoria
     const catLower = userData.categoria ? userData.categoria.toLowerCase().trim() : '';
 
     if (catLower.includes('parenti')) {
@@ -95,7 +94,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       supplementoPersona = 3.5;
     }
     
-    // Struttura finale del costo: Base fissa + (Persone * Tariffa) + Attrezzatura extra ordinata dal form
     const costoStrutturaBase = quotaBaseOmbrellone + quotaBaseSdraio;
     const costoComponenti = userData.numUtenti * supplementoPersona;
     
@@ -103,7 +101,93 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   };
   const prezzoFinale = calcolaPrezzoTotale();
 
- const handlePaymentAndBooking = async () => {
+  const qrCodeUrl = selectedSpotNumber 
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${selectedDate}|POSTO:${selectedSpotNumber}|EMAIL:${userData.email}`)}`
+    : '';
+
+  // Genera un'immagine PNG completa unendo QR Code e dettagli degli extra, forzando il download
+  const scaricaRicevutaAutomatica = (postoNum: string) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = 400;
+    canvas.height = 560;
+
+    // Sfondo Bianco
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Intestazione
+    ctx.fillStyle = '#0ea5e9';
+    ctx.fillRect(0, 0, canvas.width, 85);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 15px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('STABILIMENTO BALNEARE SANTA SEVERA', 200, 35);
+    ctx.font = '11px sans-serif';
+    ctx.fillText('PASS DI ACCESSO GIORNALIERO', 200, 58);
+
+    // Dettagli Prenotazione
+    ctx.fillStyle = '#1e293b';
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillText(`DATA: ${new Date(selectedDate).toLocaleDateString('it-IT')}`, 40, 125);
+    ctx.fillText(`TITOLARE: ${userData.nome.toUpperCase()} ${userData.cognome.toUpperCase()}`, 40, 150);
+    ctx.fillText(`CATEGORIA: ${userData.categoria}`, 40, 175);
+    
+    ctx.fillStyle = '#0284c7';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText(`OMBRELLONE N°: ${postoNum}`, 40, 210);
+
+    // Linea Divisoria
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(40, 230);
+    ctx.lineTo(360, 230);
+    ctx.stroke();
+
+    // Elenco Attrezzatura per il Personale
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillText('DOTAZIONE DA CONSEGNARE:', 40, 255);
+
+    ctx.font = '13px sans-serif';
+    ctx.fillStyle = '#64748b';
+    ctx.fillText('• 1 Ombrellone Standard (Incluso)', 50, 280);
+    ctx.fillText('• 1 Sdraio Standard (Incluso)', 50, 300);
+
+    let currentY = 320;
+    if (userData.extraSdraio > 0) {
+      ctx.fillStyle = '#16a34a'; 
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText(`• ${userData.extraSdraio} Sdraio EXTRA`, 50, currentY);
+      currentY += 20;
+    }
+    if (userData.extraSpiaggine > 0) {
+      ctx.fillStyle = '#16a34a';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText(`• ${userData.extraSpiaggine} Spiaggine EXTRA`, 50, currentY);
+    }
+
+    // Caricamento asincrono del QR per non corrompere il Canvas
+    const qrImg = new Image();
+    qrImg.crossOrigin = 'anonymous'; 
+    qrImg.src = qrCodeUrl;
+    qrImg.onload = () => {
+      ctx.drawImage(qrImg, 110, 360, 180, 180);
+
+      // Trigger automatico download del file immagine
+      const link = document.createElement('a');
+      link.download = `Pass_Ombrellone_${postoNum}_${selectedDate}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    };
+  };
+
+  const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
     
     setPaymentProcessing(true);
@@ -143,7 +227,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      // Simulazione transazione finanziaria circuito Nexi
+      // Nexi Gateway Simulation
       await new Promise((resolve) => setTimeout(resolve, 3000));
       setPaymentProcessing(false); 
 
@@ -190,14 +274,13 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
           console.error("Errore di invio notifica email:", emailErr);
         }
 
-        // 1. Impostiamo il successo
         setBookingSuccess(true);
         setReservedSpots([...reservedSpots, matchingSpot.id]);
 
-        // 2. CILIEGINA: Avviamo il download automatico del biglietto strutturato
+        // Esecuzione download automatico ticket
         setTimeout(() => {
           scaricaRicevutaAutomatica(matchingSpot.internal_code);
-        }, 500);
+        }, 600);
       }
     } catch (err) {
       alert("Si è verificato un errore critico durante la transazione.");
@@ -206,10 +289,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       setIsSubmitting(false);
     }
   };
-  
-  const qrCodeUrl = selectedSpotNumber 
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${selectedDate}|POSTO:${selectedSpotNumber}|EMAIL:${userData.email}`)}`
-    : '';
 
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
@@ -227,7 +306,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   const renderSpot = (num: number) => {
     const correspondingDbSpot = dbSpots.find(s => parseInt(s.internal_code) === num);
-    
     if (!correspondingDbSpot) return <div key={num} className="w-11 h-14 opacity-10 pointer-events-none" />;
 
     const isDbReserved = reservedSpots.includes(correspondingDbSpot.id);
@@ -280,12 +358,8 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       </div>
 
       <div className="w-full text-center py-3.5 bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-600 rounded-2xl shadow-md mb-6 sticky left-0">
-        <h2 className="font-black text-white uppercase tracking-wider text-xs sm:text-sm">
-          FRONTE MARE
-        </h2>
-        <p className="text-[10px] text-cyan-50 font-medium tracking-[0.3em] uppercase mt-0.5">
-          ~~~ Mappa della Spiaggia ~~~
-        </p>
+        <h2 className="font-black text-white uppercase tracking-wider text-xs sm:text-sm">FRONTE MARE</h2>
+        <p className="text-[10px] text-cyan-50 font-medium tracking-[0.3em] uppercase mt-0.5">~~~ Mappa della Spiaggia ~~~</p>
       </div>
 
       <div className="w-full overflow-x-auto pb-4 rounded-xl">
@@ -328,19 +402,29 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
       {/* Modale Riepilogo e Pagamento */}
       {selectedSpotNumber !== null && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center border border-slate-100 scale-in duration-200">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center border border-slate-100">
             {bookingSuccess ? (
               <div className="py-2 flex flex-col items-center">
                 <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-2xl mb-3">✓</div>
                 <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Prenotazione Confermata</h3>
-                <p className="text-xs text-slate-500 mt-1 mb-4">Mostra questo pass all'ingresso dello stabilimento</p>
+                <p className="text-[11px] text-slate-500 mt-1 mb-4">Il pass digitale è stato scaricato automaticamente.</p>
                 
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner mb-3">
-                  <img src={qrCodeUrl} alt="QR Code Prenotazione" className="w-44 h-44 mix-blend-multiply" />
-                  <div className="mt-3 pt-2.5 border-t border-slate-200 font-mono text-xs text-slate-800 space-y-1 bg-white p-2 rounded-xl border">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner mb-4 w-full text-left">
+                  <div className="flex justify-center mb-3">
+                    <img src={qrCodeUrl} alt="QR Code" className="w-40 h-40 mix-blend-multiply" />
+                  </div>
+                  <div className="pt-2.5 border-t border-slate-200 font-mono text-xs text-slate-800 space-y-1 bg-white p-3 rounded-xl border">
                     <p><strong>DATA:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
-                    <p className="text-sky-600 font-bold"><strong>OMBRELLONE N°:</strong> {selectedSpotNumber}</p>
+                    <p className="text-sky-600 font-bold text-sm"><strong>OMBRELLONE N°:</strong> {selectedSpotNumber}</p>
+                    
+                    {/* Visualizzazione Extra anche all'interno della modale di successo */}
+                    <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200 text-[11px]">
+                      <p className="font-bold text-slate-400 uppercase text-[9px] tracking-wider mb-1">Riepilogo Consegna:</p>
+                      <p>• 1 Ombrellone + 1 Sdraio (Base)</p>
+                      {userData.extraSdraio > 0 && <p className="text-emerald-600 font-semibold">• {userData.extraSdraio} Sdraio Extra</p>}
+                      {userData.extraSpiaggine > 0 && <p className="text-emerald-600 font-semibold">• {userData.extraSpiaggine} Spiaggine Extra</p>}
+                    </div>
                   </div>
                 </div>
 
@@ -357,9 +441,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
             ) : (
               <>
                 <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-2">Riepilogo e Pagamento</h3>
-                <p className="text-sm text-slate-600 mb-4">
-                  Stai per riservare l'ombrellone <span className="font-extrabold text-sky-600">N° {selectedSpotNumber}</span>.
-                </p>
+                <p className="text-sm text-slate-600 mb-4">Stai per riservare l'ombrellone <span className="font-extrabold text-sky-600">N° {selectedSpotNumber}</span>.</p>
                 
                 <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-4">
                   <p className="border-b border-slate-200/60 pb-1"><strong>Data:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
