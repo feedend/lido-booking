@@ -208,16 +208,16 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
-    { startL: 21, endL: 30, startR: 31, endR: 40, center: "" },
-    { startL: 41, endL: 50, startR: 51, endR: 60, center: "" },
-    { startL: 61, endL: 70, startR: 71, endR: 80, center: "P" },
-    { startL: 81, endL: 90, startR: 91, endR: 100, center: "a" },
-    { startL: 101, endL: 110, startR: 111, endR: 120, center: "s" },
-    { startL: 121, endL: 129, startR: 130, endR: 139, center: "s" },
-    { startL: 140, endL: 146, startR: 147, endR: 154, center: "e" },
-    { startL: 155, endL: 160, startR: 161, endR: 167, center: "r" },
-    { startL: null, endL: null, startR: 168, endR: 171, center: "a" },
-    { startL: null, endL: null, startR: 172, endR: 174, center: "" },
+    { startL: 21, endL: 30, startR: 31, endR: 40, center: "P" },
+    { startL: 41, endL: 50, startR: 51, endR: 60, center: "A" },
+    { startL: 61, endL: 70, startR: 71, endR: 80, center: "S" },
+    { startL: 81, endL: 90, startR: 91, endR: 100, center: "S" },
+    { startL: 101, endL: 110, startR: 111, endR: 120, center: "E" },
+    { startL: 121, endL: 129, startR: 130, endR: 139, center: "R" },
+    { startL: 140, endL: 146, startR: 147, endR: 154, center: "E" },
+    { startL: 155, endL: 160, startR: 161, endR: 167, center: "L" },
+    { startL: null, endL: null, startR: 168, endR: 171, center: "L" },
+    { startL: null, endL: null, startR: 172, endR: 174, center: "A" },
   ];
 
   const renderSpot = (num: number) => {
