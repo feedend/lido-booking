@@ -123,7 +123,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
             <option value="Esercito">Esercito</option>
             <option value="Altra Forza Armata">Altra Forza Armata</option>
             <option value="Esercito in quiescenza">Esercito in quiescenza</option>
-            <option value="Esercito - Parenti">Esercito - Parenti</option>
+            <option value="Esercito - Parenti">Esercito - Parenti 2° Grado</option>
             <option value="Giornaliero">Giornaliero (Solo Oggi)</option>
           </select>
         </div>
@@ -154,7 +154,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-500 mb-1 ml-1">Spiaggine Aggiuntive</label>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1 ml-1">Lettini Aggiuntivi</label>
               <select
                 className="w-full p-2.5 rounded-xl bg-white border border-slate-200 outline-none text-slate-900 text-xs font-bold"
                 value={formData.extraSpiaggine}
