@@ -1,0 +1,23 @@
+{
+  "name": "Lido Check-In - Operatore",
+  "short_name": "Lido Op",
+  "description": "Strumento per operatori di spiaggia e controllo accessi tramite QR Code",
+  "start_url": "/admin/dashboard/opdashboard",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0284c7",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/operator-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/operator-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
