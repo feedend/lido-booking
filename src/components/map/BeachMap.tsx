@@ -79,26 +79,22 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     const quotaBaseOmbrellone = 2.0;
     const quotaBaseSdraio = 1.5; 
     
-    let supplementoPersona = 0.0;
-    // Normalizziamo la stringa per evitare problemi con maiuscole/minuscole o spazi extra
-const catLower = cat.toLowerCase().trim();
+   let supplementoPersona = 0.0;
+// Usiamo 'categoria' invece di 'cat' per normalizzare la stringa
+const catLower = categoria.toLowerCase().trim();
 
 if (catLower.includes('parenti')) {
-  // Categoria: Esercito - Parenti
   supplementoPersona = 1.5;
 } else if (catLower === 'esercito') {
-  // Categoria: Esercito (Effettivi)
   supplementoPersona = 1.5;
 } else if (catLower.includes('altra forza armata')) {
-  // CORRETTO: Spostato qui a 3.5 euro
   supplementoPersona = 3.5;
 } else if (catLower.includes('quiescenza')) {
-  // Categoria: Esercito in quiescenza
   supplementoPersona = 3.5;
 } else if (catLower === 'giornaliero') {
-  // Categoria: Giornalieri esterni
   supplementoPersona = 3.5;
 }
+    
     // Struttura finale del costo: Base fissa + (Persone * Tariffa) + Attrezzatura extra ordinata dal form
     const costoStrutturaBase = quotaBaseOmbrellone + quotaBaseSdraio;
     const costoComponenti = userData.numUtenti * supplementoPersona;
