@@ -75,7 +75,10 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   // Calcolo dinamico del prezzo basato sulle tariffe ufficiali + supplementi extra
   const calcolaPrezzoTotale = () => {
+    // Punto 2: Ogni prenotazione include di base l'ombrellone (2€) e la prima sdraio (1.50€)
     const quotaBaseOmbrellone = 2.0;
+    const quotaBaseSdraio = 1.5; 
+    
     let supplementoPersona = 0.0;
     const cat = userData.categoria.trim().toLowerCase();
 
@@ -85,13 +88,16 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       supplementoPersona = 1.5;
     } else if (cat.includes('quiescenza')) {
       supplementoPersona = 3.5;
+    } else if (cat === 'giornaliero') {
+      supplementoPersona = 5.0; // Imposta qui la quota a persona per i giornalieri esterni
     }
 
-    // Calcolo base dell'ombrellone + persone a cui sommiamo il prezzo dell'attrezzatura extra selezionata
-    const costoBaseEutenti = quotaBaseOmbrellone + (userData.numUtenti * supplementoPersona);
-    return costoBaseEutenti + (userData.prezzoExtra || 0);
+    // Struttura finale del costo: Base fissa + (Persone * Tariffa) + Attrezzatura extra ordinata dal form
+    const costoStrutturaBase = quotaBaseOmbrellone + quotaBaseSdraio;
+    const costoComponenti = userData.numUtenti * supplementoPersona;
+    
+    return costoStrutturaBase + costoComponenti + (userData.prezzoExtra || 0);
   };
-
   const prezzoFinale = calcolaPrezzoTotale();
 
   const handlePaymentAndBooking = async () => {
