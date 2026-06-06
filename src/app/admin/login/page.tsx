@@ -17,31 +17,37 @@ export default function DashboardPage() {
   const [tabAttiva, setTabAttiva] = useState<'spiaggia' | 'registro'>('spiaggia');
   const router = useRouter();
 
-  useEffect(() => {
-    const controllaSessione = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+useEffect(() => {
+  const controllaSessione = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
 
-      if (!user) {
-        // Se non è loggato, torna alla pagina di login
-        router.push('/login');
-        return;
-      }
+    if (!user) {
+      router.push('/login');
+      return;
+    }
 
-      const ruoloUtente = user.user_metadata?.ruolo;
-      
-      // Sicurezza: se non è né admin né operatore, lo buttiamo fuori
-      if (ruoloUtente !== 'admin' && ruoloUtente !== 'operators') {
-        await supabase.auth.signOut();
-        router.push('/login');
-        return;
-      }
+    // Stampiamo l'utente in console per vedere esattamente dove si nasconde il ruolo durante il test
+    console.log("Utente Loggato:", user);
 
-      setRuolo(ruoloUtente);
-      setLoading(false);
-    };
+    // Controlliamo tutte le possibili posizioni dei metadati di Supabase
+    const ruoloUtente = 
+      user.user_metadata?.ruolo || 
+      user.app_metadata?.ruolo || 
+      user.raw_user_meta_data?.ruolo;
 
-    controllaSessione();
-  }, [router]);
+    // Sicurezza: se non c'è ruolo o non è valido, rimanda al login
+    if (ruoloUtente !== 'admin' && ruoloUtente !== 'operators') {
+      await supabase.auth.signOut();
+      router.push('/login');
+      return;
+    }
+
+    setRuolo(ruoloUtente);
+    setLoading(false);
+  };
+
+  controllaSessione();
+}, [router]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
