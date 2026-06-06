@@ -32,8 +32,20 @@ export default function AdminLogin() {
       if (authError) throw authError;
 
       if (data?.user) {
-        // Login riuscito, reindirizziamo alla dashboard di gestione
-        router.push('/admin/dashboard');
+        // Recuperiamo il ruolo dai metadati dell'utente configurati su Supabase
+        const ruolo = data.user.user_metadata?.ruolo;
+
+        if (ruolo === 'admin') {
+          // Reindirizzamento per l'amministratore totale
+          router.push('/admin/dashboard');
+        } else if (ruolo === 'operators') {
+          // Reindirizzamento per il personale e i gestori operativi del lido
+          router.push('/operator/dashboard');
+        } else {
+          // Protezione: se un utente normale prova a loggarsi da qui, lo buttiamo fuori
+          await supabase.auth.signOut();
+          setError('Accesso negato: non hai i permessi necessari per accedere a questa area.');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Email o password errate. Riprova.');
