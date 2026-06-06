@@ -62,15 +62,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
     <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-blue-50 text-slate-800">
       <h2 className="text-2xl font-bold text-blue-900 mb-5 text-center">Registrazione</h2>
       
-      {/* Box Informativo sulle dotazioni di Base richieste dal punto 2 */}
-      <div className="mb-6 p-4 bg-blue-50/70 border border-blue-100 rounded-2xl text-xs text-blue-950 space-y-1">
-        <p className="font-bold uppercase tracking-wide text-[10px] text-blue-800">Incluso nella prenotazione di base:</p>
-        <p>• 1 Postazione Ombrellone (€2.00)</p>
-        <p>• 1 Sdraio Standard (€1.50)</p>
-        <p className="text-slate-500 mt-1 pt-1 border-t border-blue-200/40">
-          Il prezzo finale includerà la quota base sopra indicata + il supplemento per ogni componente in base alla categoria selezionata.
-        </p>
-      </div>
+     
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
@@ -184,6 +176,16 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
           )}
         </div>
 
+ {/* Box Informativo sulle dotazioni di Base richieste dal punto 2 */}
+      <div className="mb-6 p-4 bg-blue-50/70 border border-blue-100 rounded-2xl text-xs text-blue-950 space-y-1">
+        <p className="font-bold uppercase tracking-wide text-[10px] text-blue-800">Incluso nella prenotazione di base:</p>
+        <p>• 1 Postazione Ombrellone (€2.00)</p>
+        <p>• 1 Sdraio Standard (€1.50)</p>
+        <p className="text-slate-500 mt-1 pt-1 border-t border-blue-200/40">
+          Il prezzo finale includerà la quota base sopra indicata + il supplemento per ogni componente in base alla categoria selezionata.
+        </p>
+      </div>
+        
         <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition text-sm">
           Continua
         </button>
