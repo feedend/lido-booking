@@ -103,7 +103,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   };
   const prezzoFinale = calcolaPrezzoTotale();
 
-  const handlePaymentAndBooking = async () => {
+ const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
     
     setPaymentProcessing(true);
@@ -154,7 +154,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
             spot_id: matchingSpot.id,               
-            user_id: null,                          
+            user_id: null,                                    
             total_price: prezzoFinale,              
             booking_category: userData.categoria,   
             status: 'confirmed',
@@ -162,9 +162,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
             guest_last_name: userData.cognome,
             guest_email: userData.email,
             guest_phone: userData.telefono || null
-            // Nota: Se hai aggiunto le colonne degli extra a DB puoi decommentarle qui sotto:
-            // extra_sdraio: userData.extraSdraio,
-            // extra_spiaggine: userData.extraSpiaggine
           }
         ]);
 
@@ -184,7 +181,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
               prezzo: prezzoFinale.toFixed(2),
               utenti: userData.numUtenti,
               categoria: userData.categoria,
-              // Passiamo le informazioni extra all'email per la ricevuta completa
               extraSdraio: userData.extraSdraio,
               extraSpiaggine: userData.extraSpiaggine,
               prezzoExtra: userData.prezzoExtra
@@ -194,8 +190,14 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
           console.error("Errore di invio notifica email:", emailErr);
         }
 
+        // 1. Impostiamo il successo
         setBookingSuccess(true);
         setReservedSpots([...reservedSpots, matchingSpot.id]);
+
+        // 2. CILIEGINA: Avviamo il download automatico del biglietto strutturato
+        setTimeout(() => {
+          scaricaRicevutaAutomatica(matchingSpot.internal_code);
+        }, 500);
       }
     } catch (err) {
       alert("Si è verificato un errore critico durante la transazione.");
@@ -204,7 +206,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       setIsSubmitting(false);
     }
   };
-
+  
   const qrCodeUrl = selectedSpotNumber 
     ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${selectedDate}|POSTO:${selectedSpotNumber}|EMAIL:${userData.email}`)}`
     : '';
