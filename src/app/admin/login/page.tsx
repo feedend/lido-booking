@@ -40,7 +40,7 @@ export default function AdminLogin() {
           router.push('/admin/dashboard');
         } else if (ruolo === 'operators') {
           // Reindirizzamento per il personale e i gestori operativi del lido
-          router.push('/operator/dashboard');
+          router.push('/admin/dashboard');
         } else {
           // Protezione: se un utente normale prova a loggarsi da qui, lo buttiamo fuori
           await supabase.auth.signOut();
