@@ -89,7 +89,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     } else if (cat.includes('quiescenza')) {
       supplementoPersona = 3.5;
     } else if (cat === 'giornaliero') {
-      supplementoPersona = 5.0; // Imposta qui la quota a persona per i giornalieri esterni
+      supplementoPersona = 3.5; // Imposta qui la quota a persona per i giornalieri esterni
     }
 
     // Struttura finale del costo: Base fissa + (Persone * Tariffa) + Attrezzatura extra ordinata dal form
