@@ -1,7 +1,7 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode'; // Usiamo la classe logica pura senza UI predefinita
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -19,66 +19,101 @@ interface BookingDetails {
 }
 
 export default function OperatorDashboard() {
-  const [scanResult, setScanResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(false);
   const [verificationStatus, setVerificationStatus] = useState<{
     success: boolean;
     message: string;
     details?: BookingDetails;
   } | null>(null);
 
+  // Utilizziamo un riferimento mutable per salvare l'istanza dello scanner e controllarla tra i render
+  const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
+
+  // Inizializzazione della fotocamera posteriore all'avvio
   useEffect(() => {
-    // Inizializza lo scanner sul div con id "reader"
-    const scanner = new Html5QrcodeScanner(
-      "reader",
-      { 
-        fps: 10, 
-        qrbox: { width: 250, height: 250 },
-        rememberLastUsedCamera: true,
-        supportedScanTypes: [0] // Forza solo l'uso della fotocamera posteriore/video
-      },
-      /* verbose= */ false
-    );
+    // Creiamo l'istanza logica agganciandola al div "reader"
+    const scanner = new Html5Qrcode("reader");
+    html5QrcodeRef.current = scanner;
 
-    const onScanSuccess = async (decodedText: string) => {
-      // Ferma momentaneamente lo scanner o gestisci il risultato per evitare scansioni triple
-      if (loading) return;
-      
-      scanner.clear(); // Chiude la telecamera dopo la prima lettura riuscita
-      setScanResult(decodedText);
-      await validaEInvalidaTicket(decodedText);
-    };
+    startCamera(scanner);
 
-    const onScanFailure = (error: any) => {
-      // Callback silenziosa per i frame in cui non viene rilevato nessun QR
-    };
-
-    scanner.render(onScanSuccess, onScanFailure);
-
-    // Cleanup dello scanner alla smobilitazione del componente
+    // Smantellamento sicuro della fotocamera quando l'operatore esce dalla pagina
     return () => {
-      scanner.clear().catch(err => console.error("Errore nel reset dello scanner:", err));
+      if (scanner.isScanning) {
+        scanner.stop()
+          .then(() => console.log("Fotocamera spenta correttamente."))
+          .catch(err => console.error("Errore nel distruggere lo scanner:", err));
+      }
     };
   }, []);
 
-  // Logica core di validazione e annullamento sul database
+  // Funzione dedicata all'avvio fisico dello stream video
+  const startCamera = async (scannerInstance: Html5Qrcode) => {
+    try {
+      setLoading(true);
+      
+      // Utilizziamo le configurazioni native consigliate per il tracciamento mobile
+      await scannerInstance.start(
+        // { facingMode: "environment" } costringe i dispositivi multi-camera ad aprire la fotocamera posteriore principale (grandangolare)
+        { facingMode: "environment" },
+        {
+          fps: 15, // Aumentato a 15 fps per una lettura fulminea sotto la luce del sole
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0 // Evita distorsioni hardware della sorgente video
+        },
+        async (decodedText) => {
+          // Callback di lettura riuscita del QR
+          await handleQrScanned(decodedText, scannerInstance);
+        },
+        (errorMessage) => {
+          // Log silenzioso dei frame senza codice QR rilevato
+        }
+      );
+      
+      setIsCameraReady(true);
+    } catch (err) {
+      console.error("Errore di inizializzazione hardware camera:", err);
+      setIsCameraReady(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Intercettore del QR per bloccare letture multiple concorrenti
+  const handleQrScanned = async (qrData: string, scannerInstance: Html5Qrcode) => {
+    // Se stiamo già elaborando una richiesta a database, ignoriamo i frame successivi
+    if (loading) return;
+
+    try {
+      // Spegniamo fisicamente il sensore ottico non appena leggiamo il codice, per risparmiare batteria e bloccare l'inquadratura
+      if (scannerInstance.isScanning) {
+        await scannerInstance.stop();
+      }
+      setIsCameraReady(false);
+      
+      // Avviamo il controllo di validità sul database di Supabase
+      await validaEInvalidaTicket(qrData);
+    } catch (error) {
+      console.error("Errore nel blocco della fotocamera:", error);
+    }
+  };
+
+  // Logica core di validazione e annullamento sul database (Invariata, ottimizzata nei log)
   const validaEInvalidaTicket = async (qrData: string) => {
     setLoading(true);
     setVerificationStatus(null);
 
     try {
-      // 1. Parsing dei dati dal formato generato: LIDO_SANTA_SEVERA|DATA:2026-06-06|POSTO:13|EMAIL:danilo@example.com
       const parts = qrData.split('|');
       if (parts[0] !== 'LIDO_SANTA_SEVERA') {
         setVerificationStatus({
           success: false,
           message: "QR Code non valido o non appartenente a questo stabilimento."
         });
-        setLoading(false);
         return;
       }
 
-      // Estraiamo i metadati puliti
       const dataPart = parts.find(p => p.startsWith('DATA:'))?.replace('DATA:', '');
       const postoPart = parts.find(p => p.startsWith('POSTO:'))?.replace('POSTO:', '');
       const emailPart = parts.find(p => p.startsWith('EMAIL:'))?.replace('EMAIL:', '');
@@ -88,11 +123,9 @@ export default function OperatorDashboard() {
           success: false,
           message: "Struttura del QR corrotta o incompleta."
         });
-        setLoading(false);
         return;
       }
 
-      // 2. Cerchiamo la prenotazione su Supabase facendo un join con la tabella 'spots' per verificare il codice interno dell'ombrellone
       const { data: bookings, error: fetchError } = await supabase
         .from('bookings')
         .select(`
@@ -114,13 +147,11 @@ export default function OperatorDashboard() {
           success: false,
           message: `Nessuna prenotazione trovata per l'Ombrellone N° ${postoPart} in data ${new Date(dataPart).toLocaleDateString('it-IT')}.`
         });
-        setLoading(false);
         return;
       }
 
       const booking = bookings[0];
 
-      // 3. Controllo dello Stato per prevenire il doppio ingresso (Invalidazione)
       if (booking.status === 'checked_in') {
         setVerificationStatus({
           success: false,
@@ -135,7 +166,6 @@ export default function OperatorDashboard() {
             status: 'GIÀ VALIDATO IN PRECEDENZA'
           }
         });
-        setLoading(false);
         return;
       }
 
@@ -144,11 +174,9 @@ export default function OperatorDashboard() {
           success: false,
           message: "❌ Questa prenotazione risulta cancellata o rimborsata.",
         });
-        setLoading(false);
         return;
       }
 
-      // 4. Se è confermata ('confirmed'), effettuiamo il Check-In cambiando lo stato e invalidando il codice per i controlli successivi
       const { error: updateError } = await supabase
         .from('bookings')
         .update({ status: 'checked_in' })
@@ -158,10 +186,9 @@ export default function OperatorDashboard() {
         throw new Error("Impossibile aggiornare lo stato di check-in: " + updateError.message);
       }
 
-      // Successo: Il ticket è ora valido e simultaneamente consumato
       setVerificationStatus({
         success: true,
-        message: "✅ INGRESSO AUTORIZZATO! Biglietto validato e invalidato correttamente.",
+        message: "✅ INGRESSO AUTORIZZATO! Biglietto validato correttamente.",
         details: {
           id: booking.id,
           booking_date: booking.booking_date,
@@ -176,18 +203,19 @@ export default function OperatorDashboard() {
     } catch (err: any) {
       setVerificationStatus({
         success: false,
-        message: "Errore hardware o di rete durante la sincronizzazione: " + err.message
+        message: "Errore di sincronizzazione hardware o di rete: " + err.message
       });
     } finally {
       setLoading(false);
     }
   };
 
+  // Riavvia lo scanner in modo pulito senza fare il refresh dell'intera applicazione Next.js
   const riavviaScanner = () => {
-    setScanResult(null);
     setVerificationStatus(null);
-    // Ricarica la finestra o forza il re-render del componente per far ripartire la fotocamera
-    window.location.reload();
+    if (html5QrcodeRef.current) {
+      startCamera(html5QrcodeRef.current);
+    }
   };
 
   return (
@@ -201,23 +229,32 @@ export default function OperatorDashboard() {
       </div>
 
       {/* Area del mirino della Fotocamera */}
-      <div className="overflow-hidden rounded-2xl bg-slate-950 border border-slate-800 p-2 shadow-inner relative">
-        {!scanResult && (
-          <div id="reader" className="w-full text-slate-800 font-sans text-xs rounded-xl overflow-hidden" />
-        )}
+      <div className="overflow-hidden rounded-2xl bg-slate-950 border border-slate-800 p-2 shadow-inner relative aspect-square flex items-center justify-center">
+        
+        {/* Il contenitore video originale rimane fisso nel DOM per evitare anomalie di rimozione dei tag canvas */}
+        <div 
+          id="reader" 
+          className={`w-full h-full rounded-xl overflow-hidden [&>video]:object-cover [&>video]:w-full [&>video]:h-full ${
+            verificationStatus ? "hidden" : "block"
+          }`} 
+        />
 
         {loading && (
-          <div className="absolute inset-0 bg-slate-950/80 flex flex-col items-center justify-center space-y-3 z-10">
+          <div className="absolute inset-0 bg-slate-950/80 flex flex-col items-center justify-center space-y-3 z-10 rounded-xl">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-400"></div>
-            <p className="text-xs text-sky-400 font-mono">Verifica database in corso...</p>
+            <p className="text-xs text-sky-400 font-mono">Elaborazione in corso...</p>
           </div>
         )}
 
-        {scanResult && !loading && (
-          <div className="p-4 text-center">
-            <p className="text-[10px] font-mono text-slate-500 break-all bg-slate-900 p-2 rounded-lg mb-2">
-              RAW: {scanResult}
-            </p>
+        {!isCameraReady && !verificationStatus && !loading && (
+          <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center p-4 text-center rounded-xl">
+            <p className="text-xs text-rose-400 font-medium mb-3">Fotocamera spenta o permessi mancanti.</p>
+            <button
+              onClick={riavviaScanner}
+              className="bg-sky-600 hover:bg-sky-500 text-white font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wide"
+            >
+              Attiva Fotocamera
+            </button>
           </div>
         )}
       </div>
@@ -247,7 +284,7 @@ export default function OperatorDashboard() {
             onClick={riavviaScanner}
             className="mt-4 w-full bg-white text-slate-950 font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider hover:bg-slate-200 transition-all shadow-md"
           >
-            Sblocca Cam e Prossimo Ospite ➜
+            Prossimo Ospite ➜
           </button>
         </div>
       )}
