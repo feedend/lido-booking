@@ -32,3 +32,11 @@ export default function DynamicManifest() {
 
   return null; // Non renderizza nulla graficamente
 }
+// Aggiungi questo useEffect dentro DynamicManifest.tsx
+useEffect(() => {
+  if ('serviceWorker' in navigator && window.workbox === undefined) {
+    navigator.serviceWorker.register('/sw.js')
+      .then((reg) => console.log('Service Worker registrato con successo!', reg.scope))
+      .catch((err) => console.error('Errore registrazione Service Worker:', err));
+  }
+}, []);
