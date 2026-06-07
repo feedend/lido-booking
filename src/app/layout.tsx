@@ -1,11 +1,11 @@
 import './globals.css';
 import { Inter } from 'next/font/google';
 import { Metadata } from 'next';
-import dynamic from 'next/dynamic'; // <-- Importa il caricatore dinamico
+import dynamic from 'next/dynamic';
 
 const inter = Inter({ subsets: ['latin'] });
 
-// Carica il componente Manifest SOLO sul client, evitando crash di idratazione o Error #321
+// Carica il gestore del manifest e del Service Worker SOLO ed esclusivamente sul browser client
 const DynamicManifest = dynamic(() => import('@/components/DynamicManifest'), {
   ssr: false,
 });
@@ -23,7 +23,7 @@ export default function RootLayout({
   return (
     <html lang="it">
       <body className={inter.className}>
-        {/* Ora viene eseguito in totale sicurezza solo sul browser */}
+        {/* Eseguito in totale sicurezza sul browser dopo l'idratazione */}
         <DynamicManifest />
         {children}
       </body>
