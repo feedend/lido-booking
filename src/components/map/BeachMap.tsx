@@ -157,7 +157,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     ctx.font = '13px sans-serif';
     ctx.fillStyle = '#64748b';
     ctx.fillText('• 1 Ombrellone Standard (Incluso)', 50, 280);
-    ctx.fillText('• 1 Sdraio Standard (Incluso)', 50, 300);
+    ctx.fillText('• 1 Lettino (Incluso)', 50, 300);
 
     let currentY = 320;
     if (userData.extraSdraio > 0) {
