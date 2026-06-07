@@ -180,10 +180,10 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
       <div className="mb-6 p-4 bg-blue-50/70 border border-blue-100 rounded-2xl text-xs text-blue-950 space-y-1">
         <p className="font-bold uppercase tracking-wide text-[10px] text-blue-800">Incluso nella prenotazione di base:</p>
         <p>• 1 Postazione Ombrellone (€2.00)</p>
-        <p>• 1 Sdraio Standard (€1.50)</p>
+        <p>• 1 Lettino (€1.50)</p>
         <p className="text-slate-500 mt-1 pt-1 border-t border-blue-200/40">
-          Il prezzo finale includerà la quota base sopra indicata + il supplemento per ogni componente in base alla categoria selezionata.
-        </p>
+          Il prezzo finale includerà la quota base sopra indicata + il supplemento per ogni componente in base alla categoria selezionata.</p>
+        <p className="font-bold uppercase tracking-wide text-[10px] text-blue-800">La prenotazione NON è rimborsabile</p>
       </div>
         
         <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition text-sm">
