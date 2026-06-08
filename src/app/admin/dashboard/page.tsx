@@ -14,7 +14,8 @@ import {
   Umbrella,
   User,
   Shield,
-  QrCode // Aggiunta icona per lo scanner
+  QrCode,
+  Euro // Aggiunta icona per i box dei totali
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -37,6 +38,7 @@ interface Booking {
   guest_email: string | null;
   guest_phone: string | null;
   booking_category: string | null;
+  price?: number; // Campo per memorizzare il prezzo pagato sul momento
 }
 
 export default function AdminDashboard() {
@@ -50,6 +52,11 @@ export default function AdminDashboard() {
     new Date().toISOString().split('T')[0]
   );
   
+  // STATI AGGIUNTI PER IL BLOCCO GIORNALIERO
+  const [blockType, setBlockType] = useState<'permanent' | 'daily'>('daily');
+  const [dailyPrice, setDailyPrice] = useState<string>('');
+  const [dailyNotes, setDailyNotes] = useState<string>('Blocco Giornaliero');
+
   const router = useRouter();
 
   // Struttura geometrica 1:1 con il client pubblico
@@ -77,10 +84,10 @@ export default function AdminDashboard() {
 
       if (spotsErr) throw spotsErr;
 
-      // 2. Recupera le prenotazioni attive del giorno
+      // 2. Recupera le prenotazioni attive del giorno (incluso il prezzo)
       const { data: bookingsData, error: bookErr } = await supabase
         .from('bookings')
-        .select('id, spot_id, guest_first_name, guest_last_name, guest_email, guest_phone, booking_category')
+        .select('id, spot_id, guest_first_name, guest_last_name, guest_email, guest_phone, booking_category, price')
         .eq('booking_date', filterDate)
         .not('status', 'eq', 'cancelled');
 
@@ -120,47 +127,124 @@ export default function AdminDashboard() {
     checkUser();
   }, [router, filterDate]);
 
+  // Gestione del blocco e dello sblocco (sia permanente che giornaliero)
   const handleToggleSpot = async (spotId: string, currentAvailable: boolean, internalCode: string) => {
-    const updatedAvailability = !currentAvailable;
-    
-    // Se lo spot non esiste fisicamente nel DB, lo creiamo al volo per poterlo bloccare
-    if (!spotId) {
-      const { data: newSpot, error: createErr } = await supabase
+    // CASO SBLOCCO: Se la postazione è bloccata permanentemente, la riattiviamo
+    if (!currentAvailable) {
+      const { error } = await supabase
         .from('spots')
-        .insert([{ internal_code: internalCode.toString(), is_available: updatedAvailability, notes: noteBlock || 'Chiuso manualmente', is_active: true }])
-        .select()
-        .single();
-        
-      if (createErr) {
-        alert("Errore creazione ombrellone: " + createErr.message);
+        .update({ is_available: true, notes: null })
+        .eq('id', spotId);
+
+      if (error) {
+        alert("Errore riattivazione: " + error.message);
         return;
       }
       setNoteBlock('');
       fetchData();
-      setSelectedSpot(newSpot);
+      setSelectedSpot(null);
       return;
     }
 
+    // CASO NUOVO BLOCCO PERMANENTE (Agisce sulla tabella SPOTS ad oltranza)
+    if (blockType === 'permanent') {
+      if (!spotId) {
+        const { data: newSpot, error: createErr } = await supabase
+          .from('spots')
+          .insert([{ internal_code: internalCode.toString(), is_available: false, notes: noteBlock || 'Chiuso manualmente', is_active: true }])
+          .select()
+          .single();
+          
+        if (createErr) {
+          alert("Errore creazione e blocco ombrellone: " + createErr.message);
+          return;
+        }
+        setNoteBlock('');
+        fetchData();
+        setSelectedSpot(null);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('spots')
+        .update({ is_available: false, notes: noteBlock || 'Chiuso manualmente' })
+        .eq('id', spotId);
+
+      if (error) {
+        alert("Errore blocco permanente: " + error.message);
+      } else {
+        setNoteBlock('');
+        fetchData();
+        setSelectedSpot(null);
+      }
+    } 
+    // CASO NUOVO BLOCCO GIORNALIERO (Genera una prenotazione speciale in loco per la data selezionata)
+    else {
+      let finalSpotId = spotId;
+
+      // Se l'ombrellone non è ancora mai stato registrato nella tabella spots, lo creiamo come disponibile di base
+      if (!finalSpotId) {
+        const { data: newSpot, error: createErr } = await supabase
+          .from('spots')
+          .insert([{ internal_code: internalCode.toString(), is_available: true, is_active: true }])
+          .select()
+          .single();
+
+        if (createErr) {
+          alert("Errore inizializzazione ombrellone: " + createErr.message);
+          return;
+        }
+        finalSpotId = newSpot.id;
+      }
+
+      // Inseriamo il blocco giornaliero direttamente come prenotazione in loco valorizzando il prezzo
+      const { error: bookingErr } = await supabase
+        .from('bookings')
+        .insert([{
+          spot_id: finalSpotId,
+          booking_date: filterDate,
+          guest_first_name: 'Giornaliero',
+          guest_last_name: 'In Loco',
+          booking_category: 'Giornaliero in loco',
+          status: 'confirmed',
+          checked_in: true, // Trattandosi di blocco in loco, l'assegnazione è immediata
+          price: parseFloat(dailyPrice) || 0,
+          notes: dailyNotes || 'Assegnato direttamente sul posto'
+        }]);
+
+      if (bookingErr) {
+        alert("Errore registrazione blocco giornaliero: " + bookingErr.message);
+      } else {
+        setDailyPrice('');
+        setDailyNotes('Blocco Giornaliero');
+        fetchData();
+        setSelectedSpot(null);
+      }
+    }
+  };
+
+  // Funzione per eliminare/sbloccare un blocco giornaliero
+  const handleRemoveDailyBooking = async (bookingId: string) => {
     const { error } = await supabase
-      .from('spots')
-      .update({ 
-        is_available: updatedAvailability,
-        notes: updatedAvailability ? null : (noteBlock || 'Chiuso manualmente')
-      })
-      .eq('id', spotId);
+      .from('bookings')
+      .update({ status: 'cancelled' })
+      .eq('id', bookingId);
 
     if (error) {
-      alert("Errore aggiornamento: " + error.message);
+      alert("Errore rimozione blocco giornaliero: " + error.message);
     } else {
-      setNoteBlock('');
       fetchData();
-      // Reset ispezione per aggiornare la grafica
       setSelectedSpot(null);
     }
   };
 
+  // CALCOLO STATISTICHE PER I BOX IN ALTO
+  const totaleGenerale = bookings.reduce((sum, b) => sum + (b.price || 0), 0);
+  const totaleGiornalieriInLoco = bookings
+    .filter(b => b.booking_category === 'Giornaliero in loco')
+    .reduce((sum, b) => sum + (b.price || 0), 0);
+
   const renderAdminSpot = (num: number) => {
-    // Cerchiamo la corrispondenza pulendo e convertendo sia stringhe che numeri
     const correspondingSpot = spots.find(s => {
       if (!s.internal_code) return false;
       const cleanDbCode = s.internal_code.toString().trim().replace(/^0+/, '');
@@ -170,19 +254,21 @@ export default function AdminDashboard() {
     const booking = correspondingSpot ? bookings.find(b => b.spot_id === correspondingSpot.id) : null;
     const isBooked = !!booking;
     const isManuallyBlocked = correspondingSpot ? !correspondingSpot.is_available : false;
+    const isDailyLocalBlock = booking?.booking_category === 'Giornaliero in loco';
 
     // Classi di stile dinamiche basate sullo stato reale
     let btnClass = "bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white";
     if (isManuallyBlocked) {
       btnClass = "bg-amber-500/20 border-amber-500/60 text-amber-400 hover:bg-amber-500/30 font-bold";
+    } else if (isDailyLocalBlock) {
+      // Colore viola/fucsia o ambra scuro per evidenziare i blocchi giornalieri fatti sul posto rispetto alle prenotazioni online
+      btnClass = "bg-orange-500/20 border-orange-500/60 text-orange-400 hover:bg-orange-500/30 font-bold";
     } else if (isBooked) {
       btnClass = "bg-red-500/20 border-red-500/60 text-red-400 hover:bg-red-500/30";
     } else if (correspondingSpot) {
-      // Esiste a DB ed è libero
       btnClass = "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20";
     }
 
-    // Oggetto fittizio da passare all'ispezione se l'ombrellone non è ancora registrato nella tabella spots
     const spotDataData = correspondingSpot || {
       id: '',
       internal_code: num.toString(),
@@ -199,7 +285,7 @@ export default function AdminDashboard() {
       >
         {num}
         {isBooked && (
-          <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+          <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse ${isDailyLocalBlock ? 'bg-orange-400' : 'bg-red-500'}`} />
         )}
       </button>
     );
@@ -239,7 +325,6 @@ export default function AdminDashboard() {
             />
           </div>
 
-          {/* PULSANTE DINAMICO — Carica il Registro per Admin o lo Scanner per Operatori */}
           {ruolo === 'admin' ? (
             <button 
               onClick={() => router.push('/admin/prenotazioni')}
@@ -265,10 +350,33 @@ export default function AdminDashboard() {
         </div>
       </nav>
 
+      {/* SEZIONE FINANZIARIA: BOX ADIACENTI DEL TOTALE GENERALE E GIORNALIERI IN LOCO */}
+      <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
+          <div>
+            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Incasso Totale Giorno</p>
+            <p className="text-2xl font-mono font-black text-emerald-400 mt-1">{totaleGenerale.toFixed(2)} €</p>
+          </div>
+          <div className="bg-emerald-500/10 p-3 rounded-xl text-emerald-400">
+            <Euro className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
+          <div>
+            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Giornalieri in Loco</p>
+            <p className="text-2xl font-mono font-black text-orange-400 mt-1">{totaleGiornalieriInLoco.toFixed(2)} €</p>
+          </div>
+          <div className="bg-orange-500/10 p-3 rounded-xl text-orange-400">
+            <Euro className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
       <main className="max-w-[1400px] mx-auto p-4 md:p-6 space-y-6">
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
           
-          {/* MAPPA SPIAGGIA (Inalterata, mantiene le tue prenotazioni originali) */}
+          {/* MAPPA SPIAGGIA */}
           <div className="xl:col-span-3 bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4 shadow-xl overflow-x-auto">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-3 min-w-[920px]">
               <h2 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
@@ -277,8 +385,8 @@ export default function AdminDashboard() {
               <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-wider">
                 <span className="flex items-center gap-1.5 text-emerald-400"><span className="w-2.5 h-2.5 rounded-md bg-emerald-500/20 border border-emerald-500/50"></span> Attivo</span>
                 <span className="flex items-center gap-1.5 text-red-400"><span className="w-2.5 h-2.5 rounded-md bg-red-500/20 border border-red-500/50"></span> Occupato</span>
-                <span className="flex items-center gap-1.5 text-amber-400"><span className="w-2.5 h-2.5 rounded-md bg-amber-500/20 border border-amber-500/50"></span> Bloccato</span>
-                <span className="flex items-center gap-1.5 text-slate-400"><span className="w-2.5 h-2.5 rounded-md bg-slate-900 border border-slate-800"></span> Virtuale</span>
+                <span className="flex items-center gap-1.5 text-orange-400"><span className="w-2.5 h-2.5 rounded-md bg-orange-500/20 border border-orange-500/50"></span> Giornaliero Loco</span>
+                <span className="flex items-center gap-1.5 text-amber-400"><span className="w-2.5 h-2.5 rounded-md bg-amber-500/20 border border-amber-500/50"></span> Bloccato Permanente</span>
               </div>
             </div>
 
@@ -342,23 +450,38 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between bg-slate-950 p-3 rounded-2xl border border-slate-800">
                   <span className="text-sm font-black text-white font-mono">Postazione N° {selectedSpot.internal_code}</span>
                   <span className={`px-2 py-0.5 text-[9px] rounded-lg font-black uppercase border ${
-                    selectedSpot.is_available ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                    selectedSpot._booking?.booking_category === 'Giornaliero in loco'
+                      ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+                      : selectedSpot.is_available ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                   }`}>
-                    {selectedSpot.is_available ? 'Attivo' : 'Bloccato'}
+                    {selectedSpot._booking?.booking_category === 'Giornaliero in loco' 
+                      ? 'In Loco' 
+                      : selectedSpot.is_available ? 'Attivo' : 'Bloccato'}
                   </span>
                 </div>
 
                 {selectedSpot._booking ? (
                   <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-2 text-xs">
                     <p className="text-red-400 font-black uppercase tracking-wider text-[9px] flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5" /> Informazioni Bagnante:
+                      <User className="w-3.5 h-3.5" /> Informazioni Occupante:
                     </p>
                     <div className="space-y-1.5 text-slate-300 font-mono mt-2">
-                      <p><strong className="text-slate-500">Nome:</strong> {selectedSpot._booking.guest_first_name} {selectedSpot._booking.guest_last_name}</p>
-                      <p><strong className="text-slate-500">Email:</strong> {selectedSpot._booking.guest_email || 'Non inserita'}</p>
-                      <p><strong className="text-slate-500">Tel:</strong> {selectedSpot._booking.guest_phone || 'Non inserito'}</p>
+                      <p><strong className="text-slate-500">Tipo:</strong> {selectedSpot._booking.guest_first_name} {selectedSpot._booking.guest_last_name}</p>
+                      {selectedSpot._booking.guest_email && <p><strong className="text-slate-500">Email:</strong> {selectedSpot._booking.guest_email}</p>}
+                      {selectedSpot._booking.guest_phone && <p><strong className="text-slate-500">Tel:</strong> {selectedSpot._booking.guest_phone}</p>}
                       <p><strong className="text-slate-500">Tariffa:</strong> <span className="text-orange-400 font-bold">{selectedSpot._booking.booking_category}</span></p>
+                      {selectedSpot._booking.price !== undefined && (
+                        <p><strong className="text-slate-500">Pagato:</strong> <span className="text-emerald-400 font-bold">{selectedSpot._booking.price} €</span></p>
+                      )}
                     </div>
+                    {selectedSpot._booking.booking_category === 'Giornaliero in loco' && (
+                      <button
+                        onClick={() => handleRemoveDailyBooking(selectedSpot._booking.id)}
+                        className="w-full mt-3 bg-red-900/40 hover:bg-red-900/60 border border-red-700/30 text-red-400 text-[10px] font-bold uppercase tracking-wider py-1.5 rounded-lg transition"
+                      >
+                        Libera Giornaliero
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <p className="text-[11px] text-slate-500 font-medium italic text-center py-4 bg-slate-950/40 rounded-xl border border-slate-850">
@@ -366,39 +489,88 @@ export default function AdminDashboard() {
                   </p>
                 )}
 
-                {selectedSpot.notes && (
+                {selectedSpot.notes && !selectedSpot._booking && (
                   <div className="text-xs bg-slate-950 p-3 border border-slate-800 rounded-xl text-amber-400 font-mono">
                     <strong className="text-slate-500 uppercase text-[9px] block mb-0.5">Motivazione Blocco:</strong> 
                     {selectedSpot.notes}
                   </div>
                 )}
 
-                {/* Sezione per bloccare o sbloccare la postazione ad oltranza */}
+                {/* BLOCCO DELLE AZIONI AMMINISTRATIVE AGGIORNATO CON DOPPIA SCELTA SENZA DISTINZIONE DI PROFILO LOGGATO */}
                 <div className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-2xl">
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Azioni Amministrative</h4>
-                  {selectedSpot.is_available ? (
-                    <div className="space-y-2">
-                      <input 
-                        type="text" 
-                        placeholder="Nota o motivo del blocco permanente..."
-                        value={noteBlock}
-                        onChange={(e) => setNoteBlock(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-orange-500 font-medium"
-                      />
+                  
+                  {selectedSpot.is_available && !selectedSpot._booking ? (
+                    <div className="space-y-3">
+                      {/* Selettore della Tipologia di Blocco */}
+                      <div className="grid grid-cols-2 gap-2 p-1 bg-slate-900 rounded-xl border border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setBlockType('daily')}
+                          className={`py-1.5 text-[10px] font-black uppercase rounded-lg transition ${blockType === 'daily' ? 'bg-orange-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                        >
+                          Giornaliero
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBlockType('permanent')}
+                          className={`py-1.5 text-[10px] font-black uppercase rounded-lg transition ${blockType === 'permanent' ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                        >
+                          Permanente
+                        </button>
+                      </div>
+
+                      {/* Campi condizionali basati sulla scelta */}
+                      {blockType === 'permanent' ? (
+                        <input 
+                          type="text" 
+                          placeholder="Nota o motivo del blocco permanente..."
+                          value={noteBlock}
+                          onChange={(e) => setNoteBlock(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500 font-medium"
+                        />
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-xs text-slate-500 font-bold">€</span>
+                            <input 
+                              type="number" 
+                              placeholder="Prezzo pagato in loco..."
+                              value={dailyPrice}
+                              onChange={(e) => setDailyPrice(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 pl-7 text-xs text-white focus:outline-none focus:border-orange-500 font-mono font-bold"
+                            />
+                          </div>
+                          <input 
+                            type="text" 
+                            placeholder="Note aggiuntive (es. Contanti, POS)..."
+                            value={dailyNotes}
+                            onChange={(e) => setDailyNotes(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-orange-500 font-medium"
+                          />
+                        </div>
+                      )}
+
                       <button
                         onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
-                        className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-amber-600/10"
+                        className={`w-full text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg ${
+                          blockType === 'permanent' ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/10' : 'bg-orange-600 hover:bg-orange-700 shadow-orange-600/10'
+                        }`}
                       >
-                        <XCircle className="h-4 w-4" /> Disattiva Postazione
+                        <XCircle className="h-4 w-4" /> 
+                        {blockType === 'permanent' ? 'Blocca ad Oltranza' : 'Conferma Giornaliero'}
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-600/10"
-                    >
-                      <CheckCircle className="h-4 w-4" /> Riattiva e Rendi Disponibile
-                    </button>
+                    // Pulsante di sblocco visibile solo se l'ombrellone ha un blocco permanente attivo
+                    selectedSpot.is_available === false && (
+                      <button
+                        onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-600/10"
+                      >
+                        <CheckCircle className="h-4 w-4" /> Riattiva e Rendi Disponibile
+                      </button>
+                    )
                   )}
                 </div>
               </div>
