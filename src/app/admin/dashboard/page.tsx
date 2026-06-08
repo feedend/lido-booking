@@ -197,20 +197,19 @@ export default function AdminDashboard() {
         finalSpotId = newSpot.id;
       }
 
-      // Inseriamo il blocco giornaliero direttamente come prenotazione in loco valorizzando il prezzo
-      const { error: bookingErr } = await supabase
-        .from('bookings')
-        .insert([{
-          spot_id: finalSpotId,
-          booking_date: filterDate,
-          guest_first_name: 'Giornaliero',
-          guest_last_name: 'In Loco',
-          booking_category: 'Giornaliero in loco',
-          status: 'confirmed',
-          checked_in: true, // Trattandosi di blocco in loco, l'assegnazione è immediata
-          price: parseFloat(dailyPrice) || 0,
-          notes: dailyNotes || 'Assegnato direttamente sul posto'
-        }]);
+    // Sostituisci il vecchio blocco della riga 155 con questo:
+const { error: bookingErr } = await supabase
+  .from('bookings')
+  .insert([{
+    spot_id: finalSpotId,
+    booking_date: filterDate,
+    guest_first_name: 'Giornaliero',
+    guest_last_name: 'In Loco',
+    booking_category: 'Giornaliero in loco',
+    status: 'confirmed', // Rimosso checked_in: true che mandava in crash il DB
+    total_price: parseFloat(dailyPrice) || 0, // Cambiato da price a total_price
+    notes: dailyNotes || 'Assegnato direttamente sul posto'
+  }]);
 
       if (bookingErr) {
         alert("Errore registrazione blocco giornaliero: " + bookingErr.message);
