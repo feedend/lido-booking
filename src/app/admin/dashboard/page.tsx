@@ -354,17 +354,30 @@ export default function AdminDashboard() {
         </div>
       </nav>
 
-      {/* Box Finanziari */}
-      <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
-          <div>
-            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Incasso Totale Giorno</p>
-            <p className="text-2xl font-mono font-black text-emerald-400 mt-1">{totaleGenerale.toFixed(2)} €</p>
+    {/* Box Finanziari - Visibili SOLO all'Admin */}
+      {ruolo === 'admin' && (
+        <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
+            <div>
+              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Incasso Totale Giorno</p>
+              <p className="text-2xl font-mono font-black text-emerald-400 mt-1">{totaleGenerale.toFixed(2)} €</p>
+            </div>
+            <div className="bg-emerald-500/10 p-3 rounded-xl text-emerald-400">
+              <Euro className="w-5 h-5" />
+            </div>
           </div>
-          <div className="bg-emerald-500/10 p-3 rounded-xl text-emerald-400">
-            <Euro className="w-5 h-5" />
+
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
+            <div>
+              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Giornalieri in Loco</p>
+              <p className="text-2xl font-mono font-black text-orange-400 mt-1">{totaleGiornalieriInLoco.toFixed(2)} €</p>
+            </div>
+            <div className="bg-orange-500/10 p-3 rounded-xl text-orange-400">
+              <Euro className="w-5 h-5" />
+            </div>
           </div>
         </div>
+      )}
 
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
           <div>
