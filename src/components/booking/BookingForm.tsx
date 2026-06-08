@@ -26,6 +26,8 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
     prezzoExtra: 0
   });
 
+  const [accettaRegolamento, setAccettaRegolamento] = useState(false);
+
   const COSTO_PEZZO = 1.50;
   const MAX_PEZZI = 3;
 
@@ -55,6 +57,10 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!accettaRegolamento) {
+      alert("È necessario accettare il regolamento dello stabilimento per procedere.");
+      return;
+    }
     onComplete(formData);
   };
 
@@ -62,8 +68,6 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
     <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-blue-50 text-slate-800">
       <h2 className="text-2xl font-bold text-blue-900 mb-5 text-center">Registrazione</h2>
       
-     
-
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -176,17 +180,41 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
           )}
         </div>
 
- {/* Box Informativo sulle dotazioni di Base richieste dal punto 2 */}
-      <div className="mb-6 p-4 bg-blue-50/70 border border-blue-100 rounded-2xl text-xs text-blue-950 space-y-1">
-        <p className="font-bold uppercase tracking-wide text-[10px] text-blue-800">Incluso nella prenotazione di base:</p>
-        <p>• 1 Postazione Ombrellone (€2.00)</p>
-        <p>• 1 Lettino (€1.50)</p>
-        <p className="text-slate-500 mt-1 pt-1 border-t border-blue-200/40">
-          Il prezzo finale includerà la quota base sopra indicata + il supplemento per ogni componente in base alla categoria selezionata.</p>
-        <p className="font-bold uppercase tracking-wide text-[10px] text-blue-800">La prenotazione NON è rimborsabile</p>
-      </div>
+        {/* Box Informativo sulle dotazioni di Base */}
+        <div className="p-4 bg-blue-50/70 border border-blue-100 rounded-2xl text-xs text-blue-950 space-y-1">
+          <p className="font-bold uppercase tracking-wide text-[10px] text-blue-800">Incluso nella prenotazione di base:</p>
+          <p>• 1 Postazione Ombrellone (€2.00)</p>
+          <p>• 1 Lettino (€1.50)</p>
+          <p className="text-slate-500 mt-1 pt-1 border-t border-blue-200/40">
+            Il prezzo finale includerà la quota base sopra indicata + il supplemento per ogni componente in base alla categoria selezionata.
+          </p>
+          <p className="font-bold uppercase tracking-wide text-[10px] text-blue-800">La prenotazione NON è rimborsabile</p>
+        </div>
+
+        {/* --- CHECKBOX CONFERMA REGOLAMENTO 2026 --- */}
+        <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-start gap-3">
+          <input
+            id="checkbox-regolamento"
+            type="checkbox"
+            required
+            checked={accettaRegolamento}
+            onChange={(e) => setAccettaRegolamento(e.target.checked)}
+            className="mt-1 w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 focus:ring-2 cursor-pointer"
+          />
+          <label htmlFor="checkbox-regolamento" className="text-xs text-slate-600 leading-tight select-none cursor-pointer font-medium">
+            Dichiaro di aver letto e di accettare integralmente il <strong className="text-slate-900 font-semibold">Regolamento dello Stabilimento ed. 2026</strong> in tutte le sue parti.
+          </label>
+        </div>
         
-        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg mt-2 transition text-sm">
+        <button 
+          type="submit" 
+          disabled={!accettaRegolamento}
+          className={`w-full font-bold py-4 rounded-xl shadow-lg mt-2 transition text-sm ${
+            accettaRegolamento 
+              ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer' 
+              : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+          }`}
+        >
           Continua
         </button>
       </form>
