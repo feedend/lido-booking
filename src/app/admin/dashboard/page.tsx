@@ -149,13 +149,11 @@ export default function AdminDashboard() {
     // SE L'OPERATORE SCEGLIE IL BLOCCO PERMANENTE AD OLTRANZA
     if (blockType === 'permanent') {
       if (!spotId) {
-        // Se non censito in spots, lo creiamo direttamente come bloccato
         const { error: createErr } = await supabase
           .from('spots')
           .insert([{ internal_code: internalCode.toString(), is_available: false, notes: noteBlock || 'Blocco permanente' }]);
         if (createErr) alert("Errore blocco: " + createErr.message);
       } else {
-        // Altrimenti aggiorniamo lo spot esistente
         const { error: updateErr } = await supabase
           .from('spots')
           .update({ is_available: false, notes: noteBlock || 'Blocco permanente' })
@@ -169,83 +167,66 @@ export default function AdminDashboard() {
     }
 
     // ==========================================
-    // CASO BLOCCO GIORNALIERO (IN LOCO)
+    // CASO BLOCCO GIORNALIERO (IN LOCO) - STRATEGIA UPSERT
     // ==========================================
     
-    // 1. CONTROLLO SICUREZZA PREVENTIVO: Cerchiamo la prenotazione esistente usando l'internal_code!
-    // Mettiamo a confronto i codici puliti per evitare problemi di zeri iniziali (es. "01" vs "1")
-    const existingBooking = bookings.find(b => {
-      const spotCollegato = spots.find(s => s.id === b.spot_id);
-      if (!spotCollegato) return false;
-      return spotCollegato.internal_code.toString().trim().replace(/^0+/, '') === internalCode.toString().trim().replace(/^0+/, '');
-    });
+    let finalSpotId = spotId;
 
-    if (existingBooking) {
-      // PROTEZIONE ONLINE: Se non è un giornaliero locale, blocchiamo categoricamente l'azione
-      if (existingBooking.booking_category !== 'Giornaliero in loco') {
-        alert("Impossibile sovrascrivere: su questo ombrellone è presente una prenotazione ONLINE attiva. Per liberarlo, il gestore deve annullarla dalla pagina Registro.");
-        setSelectedSpot(null);
+    // 1. Se lo spot non esiste fisicamente nella tabella spots, lo creiamo adesso
+    if (!finalSpotId) {
+      const { data: newSpot, error: createErr } = await supabase
+        .from('spots')
+        .insert([{ internal_code: internalCode.toString(), is_available: true, is_active: true }])
+        .select()
+        .single();
+
+      if (createErr) {
+        alert("Errore inizializzazione ombrellone: " + createErr.message);
         return;
       }
+      finalSpotId = newSpot.id;
+    }
 
-      // RISCRITTURA IN LOCO (SAFE UPDATE): Aggiorniamo prezzo e note del giornaliero esistente
-      const { error: updateErr } = await supabase
-        .from('bookings')
-        .update({
-          total_price: parseFloat(dailyPrice) || 0,
-          notes: dailyNotes || 'Aggiornato direttamente sul posto'
-        })
-        .eq('id', existingBooking.id);
+    // 2. CONTROLLO DI SICUREZZA LOCALE SOLO PER LE PRENOTAZIONI ONLINE
+    // Evita di sovrascrivere clienti che hanno pagato online tramite il sito
+    const targetCleanCode = internalCode.toString().trim().replace(/^0+/, '');
+    const isOnlineBookingActive = bookings.some(b => {
+      const spotCollegato = spots.find(s => s.id === b.spot_id);
+      if (!spotCollegato) return false;
+      const cleanDbCode = spotCollegato.internal_code.toString().trim().replace(/^0+/, '');
+      return cleanDbCode === targetCleanCode && b.booking_category !== 'Giornaliero in loco';
+    });
 
-      if (updateErr) {
-        alert("Errore aggiornamento blocco giornaliero: " + updateErr.message);
-      } else {
-        setDailyPrice('');
-        setDailyNotes('Blocco Giornaliero');
-        fetchData();
-        setSelectedSpot(null);
-      }
+    if (isOnlineBookingActive) {
+      alert("Impossibile sovrascrivere: su questo ombrellone è presente una prenotazione ONLINE attiva. Per liberarlo, annullala dal Registro.");
+      setSelectedSpot(null);
+      return;
+    }
+
+    // 3. OPERAZIONE DI UPSERT ATOMICA (Gestisce Insert o Update in automatico senza errori)
+    const { error: upsertErr } = await supabase
+      .from('bookings')
+      .upsert({
+        spot_id: finalSpotId,
+        booking_date: filterDate,
+        guest_first_name: 'Giornaliero',
+        guest_last_name: 'In Loco',
+        booking_category: 'Giornaliero in loco',
+        status: 'confirmed',
+        total_price: parseFloat(dailyPrice) || 0,
+        notes: dailyNotes || 'Assegnato direttamente sul posto'
+      }, { 
+        // Diciamo a Supabase su quali colonne calcolare il conflitto di unicità
+        onConflict: 'spot_id, booking_date' 
+      });
+
+    if (upsertErr) {
+      alert("Errore salvataggio blocco giornaliero: " + upsertErr.message);
     } else {
-      // Se NON esiste una prenotazione, allora procediamo alla creazione.
-      let finalSpotId = spotId;
-
-      // 2. Se lo spot non esiste fisicamente nella tabella spots, lo creiamo adesso
-      if (!finalSpotId) {
-        const { data: newSpot, error: createErr } = await supabase
-          .from('spots')
-          .insert([{ internal_code: internalCode.toString(), is_available: true, is_active: true }])
-          .select()
-          .single();
-
-        if (createErr) {
-          alert("Errore inizializzazione ombrellone: " + createErr.message);
-          return;
-        }
-        finalSpotId = newSpot.id;
-      }
-
-      // 3. INSERIMENTO NUOVO RECORD GIORNALIERO (SAFE INSERT)
-      const { error: bookingErr } = await supabase
-        .from('bookings')
-        .insert([{
-          spot_id: finalSpotId,
-          booking_date: filterDate,
-          guest_first_name: 'Giornaliero',
-          guest_last_name: 'In Loco',
-          booking_category: 'Giornaliero in loco',
-          status: 'confirmed',
-          total_price: parseFloat(dailyPrice) || 0,
-          notes: dailyNotes || 'Assegnato direttamente sul posto'
-        }]);
-
-      if (bookingErr) {
-        alert("Errore registrazione blocco giornaliero: " + bookingErr.message);
-      } else {
-        setDailyPrice('');
-        setDailyNotes('Blocco Giornaliero');
-        fetchData();
-        setSelectedSpot(null);
-      }
+      setDailyPrice('');
+      setDailyNotes('Blocco Giornaliero');
+      fetchData();
+      setSelectedSpot(null);
     }
   };
   // Funzione per eliminare/sbloccare un blocco giornaliero
