@@ -9,11 +9,8 @@ import {
   XCircle, 
   FileText, 
   LogOut, 
-  RefreshCw, 
-  ShieldAlert,
   Umbrella,
   User,
-  Shield,
   QrCode,
   Euro 
 } from 'lucide-react';
@@ -38,8 +35,8 @@ interface Booking {
   guest_email: string | null;
   guest_phone: string | null;
   booking_category: string | null;
-  total_price?: number; // Allineato al nome reale sul Database
-  notes?: string | null; // Allineato dopo l'aggiunta della colonna
+  total_price?: number; 
+  notes?: string | null; 
 }
 
 export default function AdminDashboard() {
@@ -53,7 +50,6 @@ export default function AdminDashboard() {
     new Date().toISOString().split('T')[0]
   );
   
-  // STATI AGGIUNTI PER IL BLOCCO GIORNALIERO
   const [blockType, setBlockType] = useState<'permanent' | 'daily'>('daily');
   const [dailyPrice, setDailyPrice] = useState<string>('');
   const [dailyNotes, setDailyNotes] = useState<string>('Blocco Giornaliero');
@@ -78,14 +74,12 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Recupera TUTTI gli ombrelloni senza filtri
       const { data: spotsData, error: spotsErr } = await supabase
         .from('spots')
         .select('id, internal_code, is_available, notes');
 
       if (spotsErr) throw spotsErr;
 
-      // 2. Recupera le prenotazioni attive del giorno (includendo total_price e notes)
       const { data: bookingsData, error: bookErr } = await supabase
         .from('bookings')
         .select('id, spot_id, guest_first_name, guest_last_name, guest_email, guest_phone, booking_category, total_price, notes')
@@ -126,10 +120,7 @@ export default function AdminDashboard() {
     checkUser();
   }, [router, filterDate]);
 
-  // Funzione unificata per la gestione dei blocchi e inserimenti
   const handleToggleSpot = async (spotId: string | null, isAvailable: boolean, internalCode: string) => {
-    
-    // CASO SBLOCCO PERMANENTE (Se l'ombrellone è attualmente bloccato nel DB)
     if (!isAvailable) {
       const { error: unblockErr } = await supabase
         .from('spots')
@@ -146,7 +137,6 @@ export default function AdminDashboard() {
       return;
     }
 
-    // SE L'OPERATORE SCEGLIE IL BLOCCO PERMANENTE AD OLTRANZA
     if (blockType === 'permanent') {
       if (!spotId) {
         const { error: createErr } = await supabase
@@ -165,14 +155,9 @@ export default function AdminDashboard() {
       setSelectedSpot(null);
       return;
     }
-
-    // ==========================================
-    // CASO BLOCCO GIORNALIERO (IN LOCO) - STRATEGIA UPSERT
-    // ==========================================
     
     let finalSpotId = spotId;
 
-    // 1. Se lo spot non esiste fisicamente nella tabella spots, lo creiamo adesso
     if (!finalSpotId) {
       const { data: newSpot, error: createErr } = await supabase
         .from('spots')
@@ -187,8 +172,6 @@ export default function AdminDashboard() {
       finalSpotId = newSpot.id;
     }
 
-    // 2. CONTROLLO DI SICUREZZA LOCALE SOLO PER LE PRENOTAZIONI ONLINE
-    // Evita di sovrascrivere clienti che hanno pagato online tramite il sito
     const targetCleanCode = internalCode.toString().trim().replace(/^0+/, '');
     const isOnlineBookingActive = bookings.some(b => {
       const spotCollegato = spots.find(s => s.id === b.spot_id);
@@ -203,7 +186,6 @@ export default function AdminDashboard() {
       return;
     }
 
-    // 3. OPERAZIONE DI UPSERT ATOMICA (Gestisce Insert o Update in automatico senza errori)
     const { error: upsertErr } = await supabase
       .from('bookings')
       .upsert({
@@ -216,7 +198,6 @@ export default function AdminDashboard() {
         total_price: parseFloat(dailyPrice) || 0,
         notes: dailyNotes || 'Assegnato direttamente sul posto'
       }, { 
-        // Diciamo a Supabase su quali colonne calcolare il conflitto di unicità
         onConflict: 'spot_id, booking_date' 
       });
 
@@ -229,7 +210,7 @@ export default function AdminDashboard() {
       setSelectedSpot(null);
     }
   };
-  // Funzione per eliminare/sbloccare un blocco giornaliero
+
   const handleRemoveDailyBooking = async (bookingId: string) => {
     const { error } = await supabase
       .from('bookings')
@@ -244,7 +225,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // CALCOLO STATISTICHE AGGANCIATO A TOTAL_PRICE
   const totaleGenerale = bookings.reduce((sum, b) => sum + (b.total_price || 0), 0);
   const totaleGiornalieriInLoco = bookings
     .filter(b => b.booking_category === 'Giornaliero in loco')
@@ -354,7 +334,7 @@ export default function AdminDashboard() {
         </div>
       </nav>
 
-    {/* Box Finanziari - Visibili SOLO all'Admin */}
+      {/* Box Finanziari - Visibili SOLO all'Admin */}
       {ruolo === 'admin' && (
         <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
@@ -378,17 +358,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
-
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
-          <div>
-            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Giornalieri in Loco</p>
-            <p className="text-2xl font-mono font-black text-orange-400 mt-1">{totaleGiornalieriInLoco.toFixed(2)} €</p>
-          </div>
-          <div className="bg-orange-500/10 p-3 rounded-xl text-orange-400">
-            <Euro className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
 
       <main className="max-w-[1400px] mx-auto p-4 md:p-6 space-y-6">
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
@@ -489,7 +458,6 @@ export default function AdminDashboard() {
                       {selectedSpot._booking.total_price !== undefined && (
                         <p><strong className="text-slate-500">Pagato:</strong> <span className="text-emerald-400 font-bold">{selectedSpot._booking.total_price} €</span></p>
                       )}
-                      {/* Visualizzazione Note reali legate alla Prenotazione / Blocco */}
                       {selectedSpot._booking.notes && (
                         <p className="mt-2 pt-2 border-t border-slate-850 text-amber-400 font-sans">
                           <strong className="text-slate-500 uppercase text-[9px] block mb-0.5">Note Interni / Metodo:</strong>
@@ -525,7 +493,6 @@ export default function AdminDashboard() {
                   
                   {selectedSpot.is_available && !selectedSpot._booking ? (
                     <div className="space-y-3">
-                      {/* Selettore della Tipologia di Blocco */}
                       <div className="grid grid-cols-2 gap-2 p-1 bg-slate-900 rounded-xl border border-slate-800">
                         <button
                           type="button"
@@ -543,7 +510,6 @@ export default function AdminDashboard() {
                         </button>
                       </div>
 
-                      {/* Campi condizionali basati sulla scelta */}
                       {blockType === 'permanent' ? (
                         <input 
                           type="text" 
@@ -585,7 +551,6 @@ export default function AdminDashboard() {
                       </button>
                     </div>
                   ) : (
-                    // Pulsante di sblocco visibile se l'ombrellone ha un blocco permanente attivo
                     selectedSpot.is_available === false && (
                       <button
                         onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
