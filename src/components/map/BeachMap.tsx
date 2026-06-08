@@ -114,7 +114,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Intestazione con colore Arancione Coordinato
     ctx.fillStyle = '#ea580c';
     ctx.fillRect(0, 0, canvas.width, 85);
 
@@ -181,8 +180,8 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
     
-    setPaymentProcessing(true);
     setIsSubmitting(true);
+    setPaymentProcessing(true);
 
     try {
       const matchingSpot = dbSpots.find(s => parseInt(s.internal_code) === selectedSpotNumber);
@@ -315,7 +314,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
             isReserved 
               ? 'fill-gray-300' 
               : isSelected 
-                ? 'fill-orange-600' 
+                ? 'fill-orange-600 scale-105' 
                 : 'fill-orange-400 hover:fill-orange-500'
           }`}
         >
@@ -354,11 +353,33 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   return (
     <div className="w-full max-w-5xl mx-auto bg-amber-50/40 p-4 sm:p-6 rounded-3xl shadow-xl border border-orange-100/70 relative">
+      
+      {/* Stili CSS Inline per l'animazione Fluida dell'Onda del Mare */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes waveMove {
+          0% { transform: translateX(0) translateZ(0) scaleY(1); }
+          50% { transform: translateX(-25%) translateZ(0) scaleY(0.85); }
+          100% { transform: translateX(-50%) translateZ(0) scaleY(1); }
+        }
+        .animate-wave-slow {
+          animation: waveMove 8s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
+        }
+        .animate-wave-fast {
+          animation: waveMove 5s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
+        }
+        @keyframes modalFadeIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-modal {
+          animation: modalFadeIn 0.25s ease-out forwards;
+        }
+      `}} />
+
       <div className="block md:hidden text-center text-[10px] text-orange-800/70 font-bold uppercase tracking-wider mb-2 animate-pulse">
         ↔ Scorri lateralmente per vedere tutta la spiaggia ↔
       </div>
 
-      {/* Intestazione ricolorata in Arancione sfumato */}
       <div className="w-full text-center py-3.5 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 rounded-2xl shadow-md mb-6 sticky left-0">
         <h2 className="font-black text-white uppercase tracking-wider text-xs sm:text-sm">FRONTE MARE</h2>
         <p className="text-[10px] text-orange-50 font-medium tracking-[0.3em] uppercase mt-0.5">~~~ Mappa della Spiaggia ~~~</p>
@@ -402,90 +423,109 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         </div>
       </div>
 
-      {/* Modale Riepilogo e Pagamento */}
+      {/* Modale con Micro-Interazione Onda del Mare */}
       {selectedSpotNumber !== null && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center border border-slate-100">
-            {bookingSuccess ? (
-              <div className="py-2 flex flex-col items-center">
-                <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-2xl mb-3">✓</div>
-                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Prenotazione Confermata</h3>
-                <p className="text-[11px] text-slate-500 mt-1 mb-4">Il pass digitale è stato scaricato automaticamente.</p>
-                
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner mb-4 w-full text-left">
-                  <div className="flex justify-center mb-3">
-                    <img src={qrCodeUrl} alt="QR Code" className="w-40 h-40 mix-blend-multiply" />
-                  </div>
-                  <div className="pt-2.5 border-t border-slate-200 font-mono text-xs text-slate-800 space-y-1 bg-white p-3 rounded-xl border">
-                    <p><strong>DATA:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
-                    <p className="text-orange-600 font-bold text-sm"><strong>OMBRELLONE N°:</strong> {selectedSpotNumber}</p>
-                    
-                    <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200 text-[11px]">
-                      <p className="font-bold text-slate-400 uppercase text-[9px] tracking-wider mb-1">Riepilogo Consegna:</p>
-                      <p>• 1 Ombrellone + 1 Sdraio (Base)</p>
-                      {userData.extraSdraio > 0 && <p className="text-emerald-600 font-semibold">• {userData.extraSdraio} Sdraio Extra</p>}
-                      {userData.extraSpiaggine > 0 && <p className="text-emerald-600 font-semibold">• {userData.extraSpiaggine} Spiaggine Extra</p>}
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity duration-200">
+          <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl text-center border border-slate-100 overflow-hidden relative animate-modal">
+            
+            {/* CONTAINER DELL'ONDA MARINA IN ALTO NELLA MODALE */}
+            <div className="relative h-20 bg-gradient-to-r from-orange-500 to-amber-500 flex flex-col justify-center items-center text-white overflow-hidden select-none">
+              <h3 className="text-base font-black uppercase tracking-wider relative z-10 drop-shadow-sm">
+                {bookingSuccess ? "Prenotazione Confermata" : "Riepilogo Postazione"}
+              </h3>
+              
+              {/* SVG Onde Sovrapposte e Animate */}
+              <div className="absolute left-0 bottom-0 w-[200%] h-8 pointer-events-none origin-bottom">
+                <svg className="absolute left-0 bottom-0 w-full h-full text-white/20 fill-current animate-wave-slow" viewBox="0 0 1200 120" preserveAspectRatio="none">
+                  <path d="M0,60 C150,90 350,30 500,60 C650,90 850,30 1000,60 C1150,90 1350,30 1500,60 L1500,120 L0,120 Z"></path>
+                </svg>
+                <svg className="absolute left-0 bottom-0 w-full h-full text-white fill-current animate-wave-fast" viewBox="0 0 1200 120" preserveAspectRatio="none">
+                  <path d="M0,50 C200,80 400,20 600,50 C800,80 1000,20 1200,50 L1200,120 L0,120 Z"></path>
+                </svg>
+              </div>
+            </div>
+
+            {/* CONTENUTO DELLA MODALE */}
+            <div className="p-6 pt-4">
+              {bookingSuccess ? (
+                <div className="py-1 flex flex-col items-center">
+                  <div className="w-11 h-11 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-xl mb-3 shadow-sm">✓</div>
+                  <p className="text-[11px] text-slate-500 -mt-1 mb-4">Il pass digitale è stato scaricato automaticamente.</p>
+                  
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner mb-4 w-full text-left">
+                    <div className="flex justify-center mb-3">
+                      <img src={qrCodeUrl} alt="QR Code" className="w-36 h-36 mix-blend-multiply" />
+                    </div>
+                    <div className="pt-2.5 border-t border-slate-200 font-mono text-xs text-slate-800 space-y-1 bg-white p-3 rounded-xl border">
+                      <p><strong>DATA:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
+                      <p className="text-orange-600 font-bold text-sm"><strong>OMBRELLONE N°:</strong> {selectedSpotNumber}</p>
+                      
+                      <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200 text-[11px]">
+                        <p className="font-bold text-slate-400 uppercase text-[9px] tracking-wider mb-1">Riepilogo Consegna:</p>
+                        <p>• 1 Ombrellone + 1 Sdraio (Base)</p>
+                        {userData.extraSdraio > 0 && <p className="text-emerald-600 font-semibold">• {userData.extraSdraio} Sdraio Extra</p>}
+                        {userData.extraSpiaggine > 0 && <p className="text-emerald-600 font-semibold">• {userData.extraSpiaggine} Spiaggine Extra</p>}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <button
-                  onClick={() => {
-                    setBookingSuccess(false);
-                    setSelectedSpotNumber(null);
-                  }}
-                  className="mt-2 w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all text-xs uppercase tracking-wider"
-                >
-                  Chiudi e Torna alla Mappa
-                </button>
-              </div>
-            ) : (
-              <>
-                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-2">Riepilogo e Pagamento</h3>
-                <p className="text-sm text-slate-600 mb-4">Stai per riservare l'ombrellone <span className="font-extrabold text-orange-600">N° {selectedSpotNumber}</span>.</p>
-                
-                <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-4">
-                  <p className="border-b border-slate-200/60 pb-1"><strong>Data:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
-                  <p className="border-b border-slate-200/60 pb-1"><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
-                  <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} persone</p>
-                  {userData.prezzoExtra > 0 && (
-                    <p className="border-b border-slate-200/60 pb-1 text-emerald-600 font-medium">
-                      <strong>Attrezzatura Extra:</strong> {userData.extraSdraio > 0 ? `${userData.extraSdraio} Sdraio ` : ''}{userData.extraSpiaggine > 0 ? `${userData.extraSpiaggine} Spiaggine` : ''} (+ {userData.prezzoExtra.toFixed(2)}€)
-                    </p>
-                  )}
-                  <p><strong>Tariffa:</strong> {userData.categoria}</p>
-                </div>
-
-                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3.5 mb-6 flex justify-between items-center text-sm shadow-inner">
-                  <span className="font-bold text-orange-950 uppercase text-xs tracking-wider">Totale da pagare:</span>
-                  <span className="font-black text-lg text-orange-600">{prezzoFinale.toFixed(2)} €</span>
-                </div>
-
-                <div className="flex gap-3">
                   <button
-                    disabled={isSubmitting}
-                    onClick={() => setSelectedSpotNumber(null)}
-                    className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-all text-sm"
+                    onClick={() => {
+                      setBookingSuccess(false);
+                      setSelectedSpotNumber(null);
+                    }}
+                    className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all text-xs uppercase tracking-wider shadow"
                   >
-                    Annulla
+                    Chiudi e Torna alla Mappa
                   </button>
-                  <button
-                    disabled={isSubmitting}
-                    onClick={handlePaymentAndBooking}
-                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center min-w-[140px]"
-                  >
-                    {paymentProcessing ? (
-                      <div className="flex items-center gap-2">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span className="text-xs">Circuito Nexi...</span>
-                      </div>
-                    ) : (
-                      "Paga e Conferma"
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-600 mb-4">Stai per riservare l'ombrellone <span className="font-extrabold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100">N° {selectedSpotNumber}</span>.</p>
+                  
+                  <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-4">
+                    <p className="border-b border-slate-200/60 pb-1"><strong>Data:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
+                    <p className="border-b border-slate-200/60 pb-1"><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
+                    <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} persone</p>
+                    {userData.prezzoExtra > 0 && (
+                      <p className="border-b border-slate-200/60 pb-1 text-emerald-600 font-medium">
+                        <strong>Attrezzatura Extra:</strong> {userData.extraSdraio > 0 ? `${userData.extraSdraio} Sdraio ` : ''}{userData.extraSpiaggine > 0 ? `${userData.extraSpiaggine} Spiaggine` : ''} (+ {userData.prezzoExtra.toFixed(2)}€)
+                      </p>
                     )}
-                  </button>
-                </div>
-              </>
-            )}
+                    <p><strong>Tariffa:</strong> {userData.categoria}</p>
+                  </div>
+
+                  <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3.5 mb-5 flex justify-between items-center text-sm shadow-inner">
+                    <span className="font-bold text-orange-950 uppercase text-xs tracking-wider">Totale da pagare:</span>
+                    <span className="font-black text-lg text-orange-600">{prezzoFinale.toFixed(2)} €</span>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      disabled={isSubmitting}
+                      onClick={() => setSelectedSpotNumber(null)}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-all text-sm"
+                    >
+                      Annulla
+                    </button>
+                    <button
+                      disabled={isSubmitting}
+                      onClick={handlePaymentAndBooking}
+                      className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center min-w-[140px]"
+                    >
+                      {paymentProcessing ? (
+                        <div className="flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <span className="text-xs">Circuito Nexi...</span>
+                        </div>
+                      ) : (
+                        "Paga e Conferma"
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
