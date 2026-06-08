@@ -168,36 +168,27 @@ export default function AdminDashboard() {
       return;
     }
 
+    // ==========================================
     // CASO BLOCCO GIORNALIERO (IN LOCO)
-    let finalSpotId = spotId;
-
-    // 1. Se lo spot non esiste nel database, lo creiamo al volo
-    if (!finalSpotId) {
-      const { data: newSpot, error: createErr } = await supabase
-        .from('spots')
-        .insert([{ internal_code: internalCode.toString(), is_available: true, is_active: true }])
-        .select()
-        .single();
-
-      if (createErr) {
-        alert("Errore inizializzazione ombrellone: " + createErr.message);
-        return;
-      }
-      finalSpotId = newSpot.id;
-    }
-
-    // 2. CONTROLLO SICUREZZA: Verifichiamo se c'è già una prenotazione per questo spot
-    const existingBooking = bookings.find(b => b.spot_id === finalSpotId);
+    // ==========================================
+    
+    // 1. CONTROLLO SICUREZZA PREVENTIVO: Cerchiamo la prenotazione esistente usando l'internal_code!
+    // Mettiamo a confronto i codici puliti per evitare problemi di zeri iniziali (es. "01" vs "1")
+    const existingBooking = bookings.find(b => {
+      const spotCollegato = spots.find(s => s.id === b.spot_id);
+      if (!spotCollegato) return false;
+      return spotCollegato.internal_code.toString().trim().replace(/^0+/, '') === internalCode.toString().trim().replace(/^0+/, '');
+    });
 
     if (existingBooking) {
-      // PROTEZIONE ONLINE: Se non è un giornaliero locale, blocchiamo l'azione
+      // PROTEZIONE ONLINE: Se non è un giornaliero locale, blocchiamo categoricamente l'azione
       if (existingBooking.booking_category !== 'Giornaliero in loco') {
         alert("Impossibile sovrascrivere: su questo ombrellone è presente una prenotazione ONLINE attiva. Per liberarlo, il gestore deve annullarla dalla pagina Registro.");
         setSelectedSpot(null);
         return;
       }
 
-      // RISCRITTURA IN LOCO: Aggiorniamo prezzo e note del giornaliero esistente
+      // RISCRITTURA IN LOCO (SAFE UPDATE): Aggiorniamo prezzo e note del giornaliero esistente
       const { error: updateErr } = await supabase
         .from('bookings')
         .update({
@@ -215,7 +206,25 @@ export default function AdminDashboard() {
         setSelectedSpot(null);
       }
     } else {
-      // 3. INSERIMENTO NUOVO RECORD GIORNALIERO
+      // Se NON esiste una prenotazione, allora procediamo alla creazione.
+      let finalSpotId = spotId;
+
+      // 2. Se lo spot non esiste fisicamente nella tabella spots, lo creiamo adesso
+      if (!finalSpotId) {
+        const { data: newSpot, error: createErr } = await supabase
+          .from('spots')
+          .insert([{ internal_code: internalCode.toString(), is_available: true, is_active: true }])
+          .select()
+          .single();
+
+        if (createErr) {
+          alert("Errore inizializzazione ombrellone: " + createErr.message);
+          return;
+        }
+        finalSpotId = newSpot.id;
+      }
+
+      // 3. INSERIMENTO NUOVO RECORD GIORNALIERO (SAFE INSERT)
       const { error: bookingErr } = await supabase
         .from('bookings')
         .insert([{
@@ -239,7 +248,6 @@ export default function AdminDashboard() {
       }
     }
   };
-
   // Funzione per eliminare/sbloccare un blocco giornaliero
   const handleRemoveDailyBooking = async (bookingId: string) => {
     const { error } = await supabase
