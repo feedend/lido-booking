@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
-// Inizializzazione pulita: usa la versione di default del pacchetto npm
+// Inizializzazione pulita con la versione di default
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
 export async function POST(request: Request) {
@@ -9,12 +9,11 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { selectedDate, selectedSpotNumber, userData, prezzoFinale } = body;
 
-    // 1. Validazione di sicurezza (Prezzo convertito in centesimi per Stripe)
     const importoInCentesimi = Math.round(prezzoFinale * 100); 
 
-    // 2. Creazione della sessione di Stripe Checkout
+    // Creazione della sessione di Stripe Checkout
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'], // Puoi abilitare altri metodi (es. bancomat, apple pay) dalla dashboard Stripe
+      payment_method_types: ['card'],
       mode: 'payment',
       line_items: [
         {
@@ -29,10 +28,13 @@ export async function POST(request: Request) {
           quantity: 1,
         },
       ],
-      // URL dove reindirizzare l'utente dopo il flusso
+      
+      // ==================== MODIFICA REDIRECT QUI ====================
+      // Al successo, rimanda sulla pagina passando i parametri per far scattare il download del QR
       success_url: `${request.headers.get('origin')}/?success=true&spot=${selectedSpotNumber}&date=${selectedDate}`,
       cancel_url: `${request.headers.get('origin')}/?cancelled=true`,
-      // Salviamo i metadati che ci serviranno dopo il pagamento per confermare su Supabase
+      // ===============================================================
+
       metadata: {
         spot_number: selectedSpotNumber.toString(),
         date: selectedDate,
