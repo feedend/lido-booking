@@ -216,6 +216,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     setPaymentProcessing(true);
 
     try {
+      // 1. Controlliamo prima sul DB se il posto è ancora libero per evitare conflitti
       const matchingSpot = dbSpots.find(s => parseInt(s.internal_code) === selectedSpotNumber);
       if (!matchingSpot) {
         alert("Errore nella configurazione della postazione.");
@@ -226,7 +227,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
       const { data: existingBookings, error: fetchError } = await supabase
         .from('bookings')
-        .select('guest_email, booking_category')
+        .select('guest_email')
         .eq('booking_date', selectedDate)
         .not('status', 'eq', 'cancelled');
 
@@ -237,10 +238,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      const haGiaPrenotato = existingBookings?.some(b => {
-        return b.guest_email?.toLowerCase() === userData.email.toLowerCase();
-      });
-
+      const haGiaPrenotato = existingBookings?.some(b => b.guest_email?.toLowerCase() === userData.email.toLowerCase());
       if (haGiaPrenotato) {
         alert(`Attenzione! Risulta già una prenotazione attiva a nome di ${userData.email} per la data selezionata.`);
         setPaymentProcessing(false);
@@ -249,67 +247,35 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      setPaymentProcessing(false); 
+      // 2. CHIAMATA A STRIPE: Avviamo la sessione di pagamento verso il nostro endpoint di test
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          selectedDate,
+          selectedSpotNumber,
+          userData,
+          prezzoFinale,
+        }),
+      });
 
-      const { error } = await supabase
-        .from('bookings')
-        .insert([
-          {
-            booking_date: selectedDate,
-            num_guests: userData.numUtenti,
-            spot_id: matchingSpot.id,               
-            user_id: null,                                                                                  
-            total_price: prezzoFinale,              
-            booking_category: userData.categoria,   
-            status: 'confirmed',
-            guest_first_name: userData.nome,
-            guest_last_name: userData.cognome,
-            guest_email: userData.email,
-            guest_phone: userData.telefono || null
-          }
-        ]);
+      const data = await response.json();
 
-      if (error) {
-        alert("Errore durante il salvataggio a database: " + error.message);
-      } else {
-        try {
-          await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: userData.email.trim(),
-              nome: userData.nome,
-              cognome: userData.cognome,
-              data: new Date(selectedDate).toLocaleDateString('it-IT'),
-              ombrellone: selectedSpotNumber,
-              prezzo: prezzoFinale.toFixed(2),
-              utenti: userData.numUtenti,
-              categoria: userData.categoria,
-              extraSdraio: userData.extraSdraio,
-              extraLettini: userData.extraLettini,
-              prezzoExtra: userData.prezzoExtra
-            }),
-          });
-        } catch (emailErr) {
-          console.error("Errore di invio notifica email:", emailErr);
-        }
-
-        setBookingSuccess(true);
-        setReservedSpots([...reservedSpots, matchingSpot.id]);
-
-        setTimeout(() => {
-          scaricaRicevutaAutomatica(matchingSpot.internal_code);
-        }, 600);
+      if (!response.ok || !data.url) {
+        throw new Error(data.error || "Impossibile avviare la sessione di pagamento.");
       }
-    } catch (err) {
-      alert("Si è verificato un errore critico durante la transazione.");
+
+      // 3. REINDIRIZZAMENTO: Mandiamo l'utente sulla pagina di checkout di Stripe
+      window.location.href = data.url;
+
+    } catch (err: any) {
+      alert(err.message || "Si è verificato un errore critico durante l'avvio del pagamento.");
       setPaymentProcessing(false);
-    } finally {
       setIsSubmitting(false);
     }
   };
-
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "P" },
