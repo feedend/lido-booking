@@ -18,8 +18,8 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
   const getDaysAhead = (cat: string) => {
     switch (cat) {
       case 'Esercito': return 7;
-      case 'Esercito in quiescenza': return 5;
       case 'Altra Forza Armata': return 1;
+      case 'Esercito in quiescenza': return 5;
       case 'Esercito - Parenti': return 1;
       case 'Giornaliero': return 0;
       default: return 0;
