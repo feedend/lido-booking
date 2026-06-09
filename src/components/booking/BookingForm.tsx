@@ -10,7 +10,7 @@ export type UserData = {
   numUtenti: number;
   categoria: string;
   extraSdraio: number;    
-  extraSpiaggine: number;  
+  extraLettini: number;  
   prezzoExtra: number;     
 };
 
@@ -22,20 +22,25 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
     numUtenti: 1,
     categoria: 'Esercito',
     extraSdraio: 0,
-    extraSpiaggine: 0,
+    extraLettini: 0,
     prezzoExtra: 0
   });
 
   const [accettaRegolamento, setAccettaRegolamento] = useState(false);
 
   const COSTO_PEZZO = 1.50;
-  const MAX_PEZZI = 3;
+  const MAX_PEZZI_EXTRA = 3;
 
-  const pezziTotali = formData.extraSdraio + formData.extraSpiaggine;
+  // Calcola il totale dei pezzi extra correnti (Sdraio + Lettini Aggiuntivi)
+  const pezziTotaliExtra = formData.extraSdraio + formData.extraLettini;
+
+  // Determina dinamicamente il numero massimo di sdraio selezionabili in base al lettino extra
+  // Se extraLettini è 1 -> max 2 sdraio. Se extraLettini è 0 -> max 3 sdraio.
+  const maxSdraioSelezionabili = MAX_PEZZI_EXTRA - formData.extraLettini;
 
   const handleSdraioChange = (valore: number) => {
-    if (valore + formData.extraSpiaggine <= MAX_PEZZI) {
-      const nuoviPezzi = valore + formData.extraSpiaggine;
+    if (valore + formData.extraLettini <= MAX_PEZZI_EXTRA) {
+      const nuoviPezzi = valore + formData.extraLettini;
       setFormData({
         ...formData,
         extraSdraio: valore,
@@ -44,15 +49,21 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
     }
   };
 
-  const handleSpiaggineChange = (valore: number) => {
-    if (formData.extraSdraio + valore <= MAX_PEZZI) {
-      const nuoviPezzi = formData.extraSdraio + valore;
-      setFormData({
-        ...formData,
-        extraSpiaggine: valore,
-        prezzoExtra: nuoviPezzi * COSTO_PEZZO
-      });
+  const handleLettiniChange = (valore: number) => {
+    // Se l'utente seleziona 1 lettino extra ma aveva precedentemente selezionato 3 sdraio,
+    // correggiamo automaticamente le sdraio a 2 per non superare il limite di 3 pezzi extra totali.
+    let nuovaSdraio = formData.extraSdraio;
+    if (valore === 1 && nuovaSdraio === 3) {
+      nuovaSdraio = 2;
     }
+
+    const nuoviPezzi = nuovaSdraio + valore;
+    setFormData({
+      ...formData,
+      extraLettini: valore,
+      extraSdraio: nuovaSdraio,
+      prezzoExtra: nuoviPezzi * COSTO_PEZZO
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -137,20 +148,21 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
           <div className="flex justify-between items-center">
             <span className="text-xs font-bold text-orange-950 uppercase tracking-wide">Attrezzatura Extra (€1.50/pz)</span>
             <span className="text-[11px] font-mono font-bold text-orange-700 bg-orange-100/60 px-2 py-0.5 rounded-md">
-              Scelti: {pezziTotali} / {MAX_PEZZI} Max
+              Scelti: {pezziTotaliExtra} / {MAX_PEZZI_EXTRA} Max
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] font-semibold text-slate-500 mb-1 ml-1">Sdraio Aggiuntive</label>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1 ml-1">Lettini Aggiuntivi</label>
               <select
                 className="w-full p-2.5 rounded-xl bg-white border border-slate-200 outline-none text-slate-900 text-xs font-bold focus:ring-2 focus:ring-orange-500 transition-all"
-                value={formData.extraSdraio}
-                onChange={(e) => handleSdraioChange(parseInt(e.target.value))}
+                value={formData.extraLettini}
+                onChange={(e) => handleLettiniChange(parseInt(e.target.value))}
               >
-                {[0, 1, 2, 3].map(n => (
-                  <option key={n} value={n} disabled={n + formData.extraSpiaggine > MAX_PEZZI}>
+                {/* 1 lettino è già incluso, quindi extra può essere al massimo 1 (Totale 2) */}
+                {[0, 1].map(n => (
+                  <option key={n} value={n}>
                     {n}
                   </option>
                 ))}
@@ -158,14 +170,15 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-500 mb-1 ml-1">Lettini Aggiuntivi</label>
+              <label className="block text-[11px] font-semibold text-slate-500 mb-1 ml-1">Sdraio Aggiuntive</label>
               <select
                 className="w-full p-2.5 rounded-xl bg-white border border-slate-200 outline-none text-slate-900 text-xs font-bold focus:ring-2 focus:ring-orange-500 transition-all"
-                value={formData.extraSpiaggine}
-                onChange={(e) => handleSpiaggineChange(parseInt(e.target.value))}
+                value={formData.extraSdraio}
+                onChange={(e) => handleSdraioChange(parseInt(e.target.value))}
               >
-                {[0, 1, 2, 3].map(n => (
-                  <option key={n} value={n} disabled={formData.extraSdraio + n > MAX_PEZZI}>
+                {/* Il range dinamico si adatta alle sdraio residue disponibili */}
+                {Array.from({ length: maxSdraioSelezionabili + 1 }, (_, i) => i).map(n => (
+                  <option key={n} value={n}>
                     {n}
                   </option>
                 ))}
