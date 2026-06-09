@@ -257,6 +257,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       if (!response.ok || !data.url) throw new Error(data.error || "Impossibile avviare il pagamento.");
 
       // Reindirizzamento dell'utente a Stripe
+      localStorage.setItem('temp_lido_booking_user', JSON.stringify(userData));
       window.location.href = data.url;
 
     } catch (err: any) {
