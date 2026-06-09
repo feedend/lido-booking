@@ -7,6 +7,9 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
+// Costante per identificare al volo le postazioni accessibili
+const POSTI_DISABILI = [30, 51, 70, 91];
+
 type BeachMapProps = {
   selectedDate: string;
   userData: {
@@ -227,7 +230,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
             spot_id: matchingSpot.id,               
-            user_id: null,                                                    
+            user_id: null,                                                                    
             total_price: prezzoFinale,              
             booking_category: userData.categoria,   
             status: 'confirmed',
@@ -300,6 +303,9 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     const isDeactivatedByAdmin = correspondingDbSpot.is_available === false;
     const isReserved = isDbReserved || isDeactivatedByAdmin;
     const isSelected = selectedSpotNumber === num;
+    
+    // Controllo se questo ombrellone appartiene ai posti riservati disabili
+    const isDisabili = POSTI_DISABILI.includes(num);
 
     return (
       <div
@@ -323,7 +329,8 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
           <path d="M11.5 12h1v9h-1z" fill="#94a3b8" />
         </svg>
 
-        <span className={`text-[9px] font-black mt-0.5 px-1 rounded bg-white/90 shadow-sm border transition-all
+        {/* Numero dell'ombrellone. Se è per disabili, l'altezza della riga si riduce leggermente */}
+        <span className={`text-[9px] font-black mt-0.5 px-1 rounded bg-white/90 shadow-sm border transition-all flex items-center gap-0.5
           ${isReserved 
             ? 'text-gray-400 border-gray-200' 
             : isSelected 
@@ -331,12 +338,18 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
               : 'text-orange-950 border-orange-100'
           }`}>
           {num}
+          {isDisabili && <span title="Postazione Accessibile Riservata" className="text-[9px]">♿</span>}
         </span>
 
         {isReserved && (
           <div className="absolute top-1.5 w-6 h-6 flex items-center justify-center bg-red-500/90 text-white font-extrabold text-[9px] rounded-full shadow-md">
             ✕
           </div>
+        )}
+
+        {/* Badge angolare supplementare solo se il posto è libero e accessibile */}
+        {isDisabili && !isReserved && !isSelected && (
+          <div className="absolute top-0 right-0 w-2 h-2 bg-orange-600 rounded-full border border-white shadow-sm" />
         )}
       </div>
     );
@@ -354,7 +367,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   return (
     <div className="w-full max-w-5xl mx-auto bg-amber-50/40 p-4 sm:p-6 rounded-3xl shadow-xl border border-orange-100/70 relative">
       
-      {/* Stili CSS Inline per l'animazione Fluida dell'Onda del Mare */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes waveMove {
           0% { transform: translateX(0) translateZ(0) scaleY(1); }
@@ -428,13 +440,11 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity duration-200">
           <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl text-center border border-slate-100 overflow-hidden relative animate-modal">
             
-            {/* CONTAINER DELL'ONDA MARINA IN ALTO NELLA MODALE */}
             <div className="relative h-20 bg-gradient-to-r from-orange-500 to-amber-500 flex flex-col justify-center items-center text-white overflow-hidden select-none">
               <h3 className="text-base font-black uppercase tracking-wider relative z-10 drop-shadow-sm">
                 {bookingSuccess ? "Prenotazione Confermata" : "Riepilogo Postazione"}
               </h3>
               
-              {/* SVG Onde Sovrapposte e Animate */}
               <div className="absolute left-0 bottom-0 w-[200%] h-8 pointer-events-none origin-bottom">
                 <svg className="absolute left-0 bottom-0 w-full h-full text-white/20 fill-current animate-wave-slow" viewBox="0 0 1200 120" preserveAspectRatio="none">
                   <path d="M0,60 C150,90 350,30 500,60 C650,90 850,30 1000,60 C1150,90 1350,30 1500,60 L1500,120 L0,120 Z"></path>
@@ -445,7 +455,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
               </div>
             </div>
 
-            {/* CONTENUTO DELLA MODALE */}
             <div className="p-6 pt-4">
               {bookingSuccess ? (
                 <div className="py-1 flex flex-col items-center">
@@ -481,7 +490,12 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                 </div>
               ) : (
                 <>
-                  <p className="text-sm text-slate-600 mb-4">Stai per riservare l'ombrellone <span className="font-extrabold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100">N° {selectedSpotNumber}</span>.</p>
+                  <p className="text-sm text-slate-600 mb-4">
+                    Stai per riservare l'ombrellone{' '}
+                    <span className="font-extrabold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100">
+                      N° {selectedSpotNumber} {POSTI_DISABILI.includes(selectedSpotNumber) ? '♿' : ''}
+                    </span>.
+                  </p>
                   
                   <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-4">
                     <p className="border-b border-slate-200/60 pb-1"><strong>Data:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
@@ -492,7 +506,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                         <strong>Attrezzatura Extra:</strong> {userData.extraSdraio > 0 ? `${userData.extraSdraio} Sdraio ` : ''}{userData.extraSpiaggine > 0 ? `${userData.extraSpiaggine} Spiaggine` : ''} (+ {userData.prezzoExtra.toFixed(2)}€)
                       </p>
                     )}
-                    <p><strong>Tariffa:</strong> {userData.categoria}</p>
+                    <p><strong>Tariffa:</strong> {userData.categoria} {POSTI_DISABILI.includes(selectedSpotNumber) ? '(Postazione Accessibile)' : ''}</p>
                   </div>
 
                   <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3.5 mb-5 flex justify-between items-center text-sm shadow-inner">
