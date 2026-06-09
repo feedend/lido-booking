@@ -20,7 +20,7 @@ type BeachMapProps = {
     categoria: string;
     telefono?: string;
     extraSdraio: number;    
-    extraLettini: number; // Modificato da extraSpiaggine a extraLettini
+    extraLettini: number; 
     prezzoExtra: number;     
   };
 };
@@ -111,8 +111,9 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Aumentato leggermente l'altezza del canvas per far spazio alla nota legale/militare
     canvas.width = 400;
-    canvas.height = 560;
+    canvas.height = 620;
 
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -130,48 +131,70 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     ctx.fillStyle = '#1e293b';
     ctx.textAlign = 'left';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText(`DATA: ${new Date(selectedDate).toLocaleDateString('it-IT')}`, 40, 125);
-    ctx.fillText(`TITOLARE: ${userData.nome.toUpperCase()} ${userData.cognome.toUpperCase()}`, 40, 150);
-    ctx.fillText(`CATEGORIA: ${userData.categoria}`, 40, 175);
+    ctx.fillText(`DATA: ${new Date(selectedDate).toLocaleDateString('it-IT')}`, 40, 115);
+    ctx.fillText(`TITOLARE: ${userData.nome.toUpperCase()} ${userData.cognome.toUpperCase()}`, 40, 135);
+    ctx.fillText(`CATEGORIA: ${userData.categoria}`, 40, 155);
     
     ctx.fillStyle = '#ea580c';
     ctx.font = 'bold 18px sans-serif';
-    ctx.fillText(`OMBRELLONE N°: ${postoNum}`, 40, 210);
+    ctx.fillText(`OMBRELLONE N°: ${postoNum}`, 40, 190);
 
     ctx.strokeStyle = '#cbd5e1';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(40, 230);
-    ctx.lineTo(360, 230);
+    ctx.moveTo(40, 205);
+    ctx.lineTo(360, 205);
     ctx.stroke();
 
     ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('DOTAZIONE DA CONSEGNARE:', 40, 255);
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText('DOTAZIONE DA CONSEGNARE:', 40, 225);
 
-    ctx.font = '13px sans-serif';
+    ctx.font = '12px sans-serif';
     ctx.fillStyle = '#64748b';
-    ctx.fillText('• 1 Ombrellone Standard (Incluso)', 50, 280);
-    ctx.fillText('• 1 Lettino Standard (Incluso)', 50, 300);
+    ctx.fillText('• 1 Ombrellone Standard (Incluso)', 50, 245);
+    ctx.fillText('• 1 Lettino Standard (Incluso)', 50, 265);
 
-    let currentY = 320;
+    let currentY = 285;
     if (userData.extraSdraio > 0) {
       ctx.fillStyle = '#16a34a'; 
-      ctx.font = 'bold 13px sans-serif';
+      ctx.font = 'bold 12px sans-serif';
       ctx.fillText(`• ${userData.extraSdraio} Sdraio EXTRA`, 50, currentY);
       currentY += 20;
     }
     if (userData.extraLettini > 0) {
       ctx.fillStyle = '#16a34a';
-      ctx.font = 'bold 13px sans-serif';
+      ctx.font = 'bold 12px sans-serif';
       ctx.fillText(`• ${userData.extraLettini} Lettini EXTRA`, 50, currentY);
+      currentY += 20;
     }
+
+    // --- AGGIUNTA NOTA DI CONTROLLO PERSONALE MILITARE ---
+    ctx.strokeStyle = '#f97316';
+    ctx.fillStyle = '#fff7ed';
+    ctx.lineWidth = 1;
+    // Disegna un box di avviso leggero
+    ctx.beginPath();
+    ctx.roundRect(40, currentY, 320, 54, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#c2410c';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillText('ATTENZIONE CONTROLLO ACCESSO:', 48, currentY + 16);
+    
+    ctx.fillStyle = '#431407';
+    ctx.font = '9px sans-serif';
+    ctx.fillText('La categoria dichiarata in fase di prenotazione ed il possesso della', 48, currentY + 30);
+    ctx.fillText('CARTA ESERCITO verranno controllati all\'ingresso del Lido dal', 48, currentY + 41);
+    ctx.fillText('personale militare preposto.', 48, currentY + 52);
 
     const qrImg = new Image();
     qrImg.crossOrigin = 'anonymous'; 
     qrImg.src = qrCodeUrl;
     qrImg.onload = () => {
-      ctx.drawImage(qrImg, 110, 360, 180, 180);
+      // Spostato il QR code sul fondo del nuovo canvas allungato
+      ctx.drawImage(qrImg, 110, 425, 180, 180);
 
       const link = document.createElement('a');
       link.download = `Pass_Ombrellone_${postoNum}_${selectedDate}.png`;
@@ -183,7 +206,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
     
-    // 1. Controllo di sicurezza stringente sugli Extra (Max 3 pezzi combinati)
     const extraTotati = (userData.extraSdraio || 0) + (userData.extraLettini || 0);
     if (extraTotati > 3) {
       alert("Configurazione extra non valida. Puoi selezionare al massimo 3 pezzi totali tra Sdraio e Lettini aggiuntivi.");
@@ -237,7 +259,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
             booking_date: selectedDate,
             num_guests: userData.numUtenti,
             spot_id: matchingSpot.id,               
-            user_id: null,                                                                    
+            user_id: null,                                                                                  
             total_price: prezzoFinale,              
             booking_category: userData.categoria,   
             status: 'confirmed',
@@ -351,7 +373,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
           </div>
         )}
 
-        {/* Badge angolare supplementare solo se il posto è libero e accessibile */}
         {isDisabili && !isReserved && !isSelected && (
           <div className="absolute top-0 right-0 w-2 h-2 bg-orange-600 rounded-full border border-white shadow-sm" />
         )}
@@ -442,7 +463,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       {/* Modale Riepilogo */}
       {selectedSpotNumber !== null && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity duration-200">
-          <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl text-center border border-slate-100 overflow-hidden relative animate-modal">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl text-center border border-slate-100 overflow-hidden relative animate-modal">
             
             <div className="relative h-20 bg-gradient-to-r from-orange-500 to-amber-500 flex flex-col justify-center items-center text-white overflow-hidden select-none">
               <h3 className="text-base font-black uppercase tracking-wider relative z-10 drop-shadow-sm">
@@ -469,6 +490,13 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                     <div className="flex justify-center mb-3">
                       <img src={qrCodeUrl} alt="QR Code" className="w-36 h-36 mix-blend-multiply" />
                     </div>
+
+                    {/* --- BOX DI AVVISO RIGURDO IL CONTROLLO MILITARE A SCHERMO SOPRA IL QR --- */}
+                    <div className="mb-3 p-3 bg-orange-50 border border-orange-100 rounded-xl text-[11px] text-orange-950 leading-tight">
+                      <strong className="text-orange-700 block mb-0.5 uppercase tracking-wide text-[10px]">Nota di Accesso al Lido:</strong>
+                      La categoria dichiarata in fase di prenotazione ed il possesso della <strong className="font-bold">CARTA ESERCITO</strong> verrà controllata all'ingresso del Lido dal personale militare preposto.
+                    </div>
+
                     <div className="pt-2.5 border-t border-slate-200 font-mono text-xs text-slate-800 space-y-1 bg-white p-3 rounded-xl border">
                       <p><strong>DATA:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
                       <p className="text-orange-600 font-bold text-sm"><strong>OMBRELLONE N°:</strong> {selectedSpotNumber}</p>
