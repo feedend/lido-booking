@@ -39,29 +39,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // --- 1. INTERCETTAZIONE RIENTRO DA STRIPE ED ERRORE / SUCCESSO ---
-  useEffect(() => {
-    // Verifichiamo i parametri nell'URL usando window.location
-    const queryParams = new URLSearchParams(window.location.search);
-    const isSuccess = queryParams.get('success') === 'true';
-    const spotParam = queryParams.get('spot');
-    const dateParam = queryParams.get('date');
-
-    if (isSuccess && spotParam && dateParam) {
-      const numeroPosto = parseInt(spotParam);
-      setSelectedSpotNumber(numeroPosto);
-      setBookingSuccess(true);
-      
-      // Ritardo per essere sicuri che l'immagine del QR Code generata dall'URL sia pronta
-      setTimeout(() => {
-        scaricaRicevutaAutomatica(spotParam);
-        
-        // Pulizia opzionale dell'URL per non ri-scaricare al refresh della pagina
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }, 1000);
-    }
-  }, [dbSpots]); // Si attiva quando i dati degli spot sono pronti
-
   useEffect(() => {
     const loadBeachData = async () => {
       setIsLoading(true);
@@ -264,7 +241,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      // Invio richiesta a Stripe API
+      // Avviamo la sessione di pagamento verso Stripe
       const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -279,7 +256,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       const data = await response.json();
       if (!response.ok || !data.url) throw new Error(data.error || "Impossibile avviare il pagamento.");
 
-      // Reindirizzamento a Stripe
+      // Reindirizzamento dell'utente a Stripe
       window.location.href = data.url;
 
     } catch (err: any) {
@@ -357,7 +334,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         <h2 className="font-black text-white uppercase tracking-wider text-xs sm:text-sm">FRONTE MARE</h2>
       </div>
 
-      {/* Rendering Mappa Righe */}
       <div className="w-full overflow-x-auto pb-4 rounded-xl">
         <div className="flex flex-col gap-3 w-[960px] mx-auto pl-2 pr-4">
           {rows.map((row, rowIndex) => (
@@ -388,7 +364,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         </div>
       </div>
 
-      {/* Modale Riepilogo e Successo */}
       {selectedSpotNumber !== null && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl text-center border overflow-hidden relative animate-modal">
@@ -403,7 +378,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
               {bookingSuccess ? (
                 <div className="py-1 flex flex-col items-center">
                   <div className="w-11 h-11 bg-green-100 text-green-600 rounded-full flex items-center justify-center text-xl mb-3 shadow-sm">✓</div>
-                  <p className="text-[11px] text-slate-500 -mt-1 mb-4">Il pass digitale è stato scaricato automaticamente.</p>
+                  <p className="text-[11px] text-slate-500 -mt-1 mb-4">Il pass digitale è stato memorizzato correttamente.</p>
                   
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner mb-4 w-full text-left">
                     <div className="flex justify-center mb-3">
