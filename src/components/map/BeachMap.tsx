@@ -7,7 +7,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-// Costante per identificare al volo le postazioni accessibili
 const POSTI_DISABILI = [30, 51, 70, 91];
 
 type BeachMapProps = {
@@ -39,6 +38,29 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // --- 1. INTERCETTAZIONE RIENTRO DA STRIPE ED ERRORE / SUCCESSO ---
+  useEffect(() => {
+    // Verifichiamo i parametri nell'URL usando window.location
+    const queryParams = new URLSearchParams(window.location.search);
+    const isSuccess = queryParams.get('success') === 'true';
+    const spotParam = queryParams.get('spot');
+    const dateParam = queryParams.get('date');
+
+    if (isSuccess && spotParam && dateParam) {
+      const numeroPosto = parseInt(spotParam);
+      setSelectedSpotNumber(numeroPosto);
+      setBookingSuccess(true);
+      
+      // Ritardo per essere sicuri che l'immagine del QR Code generata dall'URL sia pronta
+      setTimeout(() => {
+        scaricaRicevutaAutomatica(spotParam);
+        
+        // Pulizia opzionale dell'URL per non ri-scaricare al refresh della pagina
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }, 1000);
+    }
+  }, [dbSpots]); // Si attiva quando i dati degli spot sono pronti
 
   useEffect(() => {
     const loadBeachData = async () => {
@@ -111,7 +133,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Aumentato leggermente l'altezza del canvas per far spazio alla nota legale/militare
     canvas.width = 400;
     canvas.height = 620;
 
@@ -169,11 +190,9 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       currentY += 20;
     }
 
-    // --- AGGIUNTA NOTA DI CONTROLLO PERSONALE MILITARE ---
     ctx.strokeStyle = '#f97316';
     ctx.fillStyle = '#fff7ed';
     ctx.lineWidth = 1;
-    // Disegna un box di avviso leggero
     ctx.beginPath();
     ctx.roundRect(40, currentY, 320, 54, 8);
     ctx.fill();
@@ -193,7 +212,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     qrImg.crossOrigin = 'anonymous'; 
     qrImg.src = qrCodeUrl;
     qrImg.onload = () => {
-      // Spostato il QR code sul fondo del nuovo canvas allungato
       ctx.drawImage(qrImg, 110, 425, 180, 180);
 
       const link = document.createElement('a');
@@ -216,7 +234,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     setPaymentProcessing(true);
 
     try {
-      // 1. Controlliamo prima sul DB se il posto è ancora libero per evitare conflitti
       const matchingSpot = dbSpots.find(s => parseInt(s.internal_code) === selectedSpotNumber);
       if (!matchingSpot) {
         alert("Errore nella configurazione della postazione.");
@@ -247,12 +264,10 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      // 2. CHIAMATA A STRIPE: Avviamo la sessione di pagamento verso il nostro endpoint di test
+      // Invio richiesta a Stripe API
       const response = await fetch('/api/checkout', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           selectedDate,
           selectedSpotNumber,
@@ -262,20 +277,18 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       });
 
       const data = await response.json();
+      if (!response.ok || !data.url) throw new Error(data.error || "Impossibile avviare il pagamento.");
 
-      if (!response.ok || !data.url) {
-        throw new Error(data.error || "Impossibile avviare la sessione di pagamento.");
-      }
-
-      // 3. REINDIRIZZAMENTO: Mandiamo l'utente sulla pagina di checkout di Stripe
+      // Reindirizzamento a Stripe
       window.location.href = data.url;
 
     } catch (err: any) {
-      alert(err.message || "Si è verificato un errore critico durante l'avvio del pagamento.");
+      alert(err.message || "Si è verificato un errore critico durante la transazione.");
       setPaymentProcessing(false);
       setIsSubmitting(false);
     }
   };
+
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "P" },
@@ -307,41 +320,16 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         className={`relative w-11 h-14 flex flex-col items-center justify-center transition-all duration-150 select-none shrink-0
           ${isReserved ? 'text-gray-400 cursor-not-allowed' : 'text-orange-950 hover:scale-110 cursor-pointer'}`}
       >
-        <svg 
-          viewBox="0 0 24 24" 
-          className={`w-9 h-9 drop-shadow-sm transition-colors ${
-            isReserved 
-              ? 'fill-gray-300' 
-              : isSelected 
-                ? 'fill-orange-600 scale-105' 
-                : 'fill-orange-400 hover:fill-orange-500'
-          }`}
-        >
+        <svg viewBox="0 0 24 24" className={`w-9 h-9 drop-shadow-sm transition-colors ${isReserved ? 'fill-gray-300' : isSelected ? 'fill-orange-600 scale-105' : 'fill-orange-400 hover:fill-orange-500'}`}>
           <path d="M12 2C6.48 2 2 6.48 2 12h20c0-5.52-4.48-10-10-10z" />
           <path d="M12 2v10M7 4.5L12 12M17 4.5L12 12" stroke="white" strokeWidth="0.5" strokeLinecap="round" />
           <path d="M11.5 12h1v9h-1z" fill="#94a3b8" />
         </svg>
-
-        <span className={`text-[9px] font-black mt-0.5 px-1 rounded bg-white/90 shadow-sm border transition-all flex items-center gap-0.5
-          ${isReserved 
-            ? 'text-gray-400 border-gray-200' 
-            : isSelected 
-              ? 'text-orange-600 border-orange-500 ring-1 ring-orange-500/30' 
-              : 'text-orange-950 border-orange-100'
-          }`}>
+        <span className={`text-[9px] font-black mt-0.5 px-1 rounded bg-white/90 shadow-sm border transition-all flex items-center gap-0.5 ${isReserved ? 'text-gray-400 border-gray-200' : isSelected ? 'text-orange-600 border-orange-500 ring-1 ring-orange-500/30' : 'text-orange-950 border-orange-100'}`}>
           {num}
           {isDisabili && <span title="Postazione Accessibile Riservata" className="text-[9px]">♿</span>}
         </span>
-
-        {isReserved && (
-          <div className="absolute top-1.5 w-6 h-6 flex items-center justify-center bg-red-500/90 text-white font-extrabold text-[9px] rounded-full shadow-md">
-            ✕
-          </div>
-        )}
-
-        {isDisabili && !isReserved && !isSelected && (
-          <div className="absolute top-0 right-0 w-2 h-2 bg-orange-600 rounded-full border border-white shadow-sm" />
-        )}
+        {isReserved && <div className="absolute top-1.5 w-6 h-6 flex items-center justify-center bg-red-500/90 text-white font-extrabold text-[9px] rounded-full shadow-md">✕</div>}
       </div>
     );
   };
@@ -357,37 +345,19 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   return (
     <div className="w-full max-w-5xl mx-auto bg-amber-50/40 p-4 sm:p-6 rounded-3xl shadow-xl border border-orange-100/70 relative">
-      
       <style dangerouslySetInnerHTML={{__html: `
-        @keyframes waveMove {
-          0% { transform: translateX(0) translateZ(0) scaleY(1); }
-          50% { transform: translateX(-25%) translateZ(0) scaleY(0.85); }
-          100% { transform: translateX(-50%) translateZ(0) scaleY(1); }
-        }
-        .animate-wave-slow {
-          animation: waveMove 8s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
-        }
-        .animate-wave-fast {
-          animation: waveMove 5s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
-        }
-        @keyframes modalFadeIn {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        .animate-modal {
-          animation: modalFadeIn 0.25s ease-out forwards;
-        }
+        @keyframes waveMove { 0% { transform: translateX(0) translateZ(0) scaleY(1); } 50% { transform: translateX(-25%) translateZ(0) scaleY(0.85); } 100% { transform: translateX(-50%) translateZ(0) scaleY(1); } }
+        .animate-wave-slow { animation: waveMove 8s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite; }
+        .animate-wave-fast { animation: waveMove 5s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite; }
+        @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .animate-modal { animation: modalFadeIn 0.25s ease-out forwards; }
       `}} />
-
-      <div className="block md:hidden text-center text-[10px] text-orange-800/70 font-bold uppercase tracking-wider mb-2 animate-pulse">
-        ↔ Scorri lateralmente per vedere tutta la spiaggia ↔
-      </div>
 
       <div className="w-full text-center py-3.5 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 rounded-2xl shadow-md mb-6 sticky left-0">
         <h2 className="font-black text-white uppercase tracking-wider text-xs sm:text-sm">FRONTE MARE</h2>
-        <p className="text-[10px] text-orange-50 font-medium tracking-[0.3em] uppercase mt-0.5">~~~ Mappa della Spiaggia ~~~</p>
       </div>
 
+      {/* Rendering Mappa Righe */}
       <div className="w-full overflow-x-auto pb-4 rounded-xl">
         <div className="flex flex-col gap-3 w-[960px] mx-auto pl-2 pr-4">
           {rows.map((row, rowIndex) => (
@@ -395,27 +365,19 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
               <div className="w-[430px] grid grid-cols-10 gap-0.5 justify-items-start">
                 {row.startL ? (
                   <>
-                    {Array.from({ length: 10 - (row.endL! - row.startL! + 1) }).map((_, i) => (
-                      <div key={`empty-l-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />
-                    ))}
+                    {Array.from({ length: 10 - (row.endL! - row.startL! + 1) }).map((_, i) => <div key={`empty-l-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />)}
                     {Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderSpot)}
                   </>
                 ) : (
                   Array.from({ length: 10 }).map((_, i) => <div key={`blank-l-${i}`} className="w-10 h-14" />)
                 )}
               </div>
-              
-              <div className="w-12 shrink-0 flex justify-center items-center font-black text-amber-900 uppercase text-[9px] tracking-wider bg-amber-100/90 py-2 rounded-xl border border-amber-200/50 shadow-inner">
-                {row.center || "•"}
-              </div>
-              
+              <div className="w-12 shrink-0 flex justify-center items-center font-black text-amber-900 uppercase text-[9px] bg-amber-100/90 py-2 rounded-xl border">{row.center || "•"}</div>
               <div className="w-[430px] grid grid-cols-10 gap-0.5 justify-items-start">
                 {row.startR ? (
                   <>
                     {Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderSpot)}
-                    {Array.from({ length: 10 - (row.endR! - row.startR! + 1) }).map((_, i) => (
-                      <div key={`empty-r-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />
-                    ))}
+                    {Array.from({ length: 10 - (row.endR! - row.startR! + 1) }).map((_, i) => <div key={`empty-r-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />)}
                   </>
                 ) : (
                   Array.from({ length: 10 }).map((_, i) => <div key={`blank-r-${i}`} className="w-10 h-14" />)
@@ -426,23 +388,14 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         </div>
       </div>
 
-      {/* Modale Riepilogo */}
+      {/* Modale Riepilogo e Successo */}
       {selectedSpotNumber !== null && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity duration-200">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl text-center border border-slate-100 overflow-hidden relative animate-modal">
-            
-            <div className="relative h-20 bg-gradient-to-r from-orange-500 to-amber-500 flex flex-col justify-center items-center text-white overflow-hidden select-none">
-              <h3 className="text-base font-black uppercase tracking-wider relative z-10 drop-shadow-sm">
-                {bookingSuccess ? "Prenotazione Confermata" : "Riepilogo Postazione"}
-              </h3>
-              
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl text-center border overflow-hidden relative animate-modal">
+            <div className="relative h-20 bg-gradient-to-r from-orange-500 to-amber-500 flex flex-col justify-center items-center text-white select-none">
+              <h3 className="text-base font-black uppercase tracking-wider relative z-10">{bookingSuccess ? "Prenotazione Confermata" : "Riepilogo Postazione"}</h3>
               <div className="absolute left-0 bottom-0 w-[200%] h-8 pointer-events-none origin-bottom">
-                <svg className="absolute left-0 bottom-0 w-full h-full text-white/20 fill-current animate-wave-slow" viewBox="0 0 1200 120" preserveAspectRatio="none">
-                  <path d="M0,60 C150,90 350,30 500,60 C650,90 850,30 1000,60 C1150,90 1350,30 1500,60 L1500,120 L0,120 Z"></path>
-                </svg>
-                <svg className="absolute left-0 bottom-0 w-full h-full text-white fill-current animate-wave-fast" viewBox="0 0 1200 120" preserveAspectRatio="none">
-                  <path d="M0,50 C200,80 400,20 600,50 C800,80 1000,20 1200,50 L1200,120 L0,120 Z"></path>
-                </svg>
+                <svg className="absolute left-0 bottom-0 w-full h-full text-white/20 fill-current animate-wave-slow" viewBox="0 0 1200 120" preserveAspectRatio="none"><path d="M0,60 C150,90 350,30 500,60 C650,90 850,30 1000,60 C1150,90 1350,30 1500,60 L1500,120 L0,120 Z"></path></svg>
               </div>
             </div>
 
@@ -457,7 +410,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                       <img src={qrCodeUrl} alt="QR Code" className="w-36 h-36 mix-blend-multiply" />
                     </div>
 
-                    {/* --- BOX DI AVVISO RIGURDO IL CONTROLLO MILITARE A SCHERMO SOPRA IL QR --- */}
                     <div className="mb-3 p-3 bg-orange-50 border border-orange-100 rounded-xl text-[11px] text-orange-950 leading-tight">
                       <strong className="text-orange-700 block mb-0.5 uppercase tracking-wide text-[10px]">Nota di Accesso al Lido:</strong>
                       La categoria dichiarata in fase di prenotazione ed il possesso della <strong className="font-bold">CARTA ESERCITO</strong> verrà controllata all'ingresso del Lido dal personale militare preposto.
@@ -466,13 +418,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                     <div className="pt-2.5 border-t border-slate-200 font-mono text-xs text-slate-800 space-y-1 bg-white p-3 rounded-xl border">
                       <p><strong>DATA:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
                       <p className="text-orange-600 font-bold text-sm"><strong>OMBRELLONE N°:</strong> {selectedSpotNumber}</p>
-                      
-                      <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200 text-[11px]">
-                        <p className="font-bold text-slate-400 uppercase text-[9px] tracking-wider mb-1">Riepilogo Consegna:</p>
-                        <p>• 1 Ombrellone + 1 Lettino (Base)</p>
-                        {userData.extraSdraio > 0 && <p className="text-emerald-600 font-semibold">• {userData.extraSdraio} Sdraio Extra</p>}
-                        {userData.extraLettini > 0 && <p className="text-emerald-600 font-semibold">• {userData.extraLettini} {userData.extraLettini === 1 ? 'Lettino' : 'Lettini'} Extra</p>}
-                      </div>
                     </div>
                   </div>
 
@@ -481,58 +426,22 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                       setBookingSuccess(false);
                       setSelectedSpotNumber(null);
                     }}
-                    className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all text-xs uppercase tracking-wider shadow"
+                    className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all text-xs uppercase tracking-wider"
                   >
                     Chiudi e Torna alla Mappa
                   </button>
                 </div>
               ) : (
                 <>
-                  <p className="text-sm text-slate-600 mb-4">
-                    Stai per riservare l'ombrellone{' '}
-                    <span className="font-extrabold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100">
-                      N° {selectedSpotNumber} {POSTI_DISABILI.includes(selectedSpotNumber) ? '♿' : ''}
-                    </span>.
-                  </p>
-                  
-                  <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-4">
-                    <p className="border-b border-slate-200/60 pb-1"><strong>Data:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
-                    <p className="border-b border-slate-200/60 pb-1"><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
-                    <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} persone</p>
-                    {userData.prezzoExtra > 0 && (
-                      <p className="border-b border-slate-200/60 pb-1 text-emerald-600 font-medium">
-                        <strong>Attrezzatura Extra:</strong> {userData.extraSdraio > 0 ? `${userData.extraSdraio} Sdraio ` : ''}{userData.extraLettini > 0 ? `${userData.extraLettini} Lettini` : ''} (+ {userData.prezzoExtra.toFixed(2)}€)
-                      </p>
-                    )}
-                    <p><strong>Tariffa:</strong> {userData.categoria} {POSTI_DISABILI.includes(selectedSpotNumber) ? '(Postazione Accessibile)' : ''}</p>
-                  </div>
-
-                  <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3.5 mb-5 flex justify-between items-center text-sm shadow-inner">
-                    <span className="font-bold text-orange-950 uppercase text-xs tracking-wider">Totale da pagare:</span>
+                  <p className="text-sm text-slate-600 mb-4">Stai per riservare l'ombrellone <span className="font-extrabold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border">N° {selectedSpotNumber}</span>.</p>
+                  <div className="bg-orange-50 border rounded-2xl p-3.5 mb-5 flex justify-between items-center text-sm">
+                    <span className="font-bold text-orange-950 uppercase text-xs">Totale da pagare:</span>
                     <span className="font-black text-lg text-orange-600">{prezzoFinale.toFixed(2)} €</span>
                   </div>
-
                   <div className="flex gap-3">
-                    <button
-                      disabled={isSubmitting}
-                      onClick={() => setSelectedSpotNumber(null)}
-                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-all text-sm"
-                    >
-                      Annulla
-                    </button>
-                    <button
-                      disabled={isSubmitting}
-                      onClick={handlePaymentAndBooking}
-                      className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center min-w-[140px]"
-                    >
-                      {paymentProcessing ? (
-                        <div className="flex items-center gap-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          <span className="text-xs">Circuito Nexi...</span>
-                        </div>
-                      ) : (
-                        "Paga e Conferma"
-                      )}
+                    <button onClick={() => setSelectedSpotNumber(null)} className="flex-1 bg-slate-100 text-slate-700 font-bold py-3 rounded-xl text-sm">Annulla</button>
+                    <button disabled={isSubmitting} onClick={handlePaymentAndBooking} className="flex-1 bg-orange-500 text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center">
+                      {paymentProcessing ? "Elaborazione..." : "Paga e Conferma"}
                     </button>
                   </div>
                 </>
