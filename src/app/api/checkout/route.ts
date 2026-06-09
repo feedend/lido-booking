@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+// Inizializzazione pulita: usa la versione di default del pacchetto npm
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
+
+export async function POST(request: Request) {
   apiVersion: '2025-01-27' as any, // Adatta la versione se necessario
 });
 
