@@ -105,7 +105,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${selectedDate}|POSTO:${selectedSpotNumber}|EMAIL:${userData.email}`)}`
     : '';
 
-  const scaricaRicevutaAutomatica = (postoNum: string) => {
+  const scaricaRicevutaAutomatica = (postoNum: number) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -198,6 +198,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     };
   };
 
+  // LOGICA FITTIZIA ORIGINALE RIPRISTINATA
   const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
     
@@ -241,24 +242,40 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      // Avviamo la sessione di pagamento verso Stripe
-      const response = await fetch('/api/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          selectedDate,
-          selectedSpotNumber,
-          userData,
-          prezzoFinale,
-        }),
-      });
+      // Simulazione locale dell'attesa di pagamento (3 secondi fittizi)
+      setTimeout(async () => {
+        try {
+          const { error: insertError } = await supabase
+            .from('bookings')
+            .insert([{
+              spot_id: matchingSpot.id,
+              booking_date: selectedDate,
+              guest_nome: userData.nome,
+              guest_cognome: userData.cognome,
+              guest_email: userData.email,
+              guest_phone: userData.telefono || null,
+              num_guests: userData.numUtenti,
+              booking_category: userData.categoria,
+              extra_sdraio: userData.extraSdraio,
+              extra_lettini: userData.extraLettini,
+              total_price: prezzoFinale,
+              status: 'confirmed'
+            }]);
 
-      const data = await response.json();
-      if (!response.ok || !data.url) throw new Error(data.error || "Impossibile avviare il pagamento.");
-
-      // Reindirizzamento dell'utente a Stripe
-      localStorage.setItem('temp_lido_booking_user', JSON.stringify(userData));
-      window.location.href = data.url;
+          if (insertError) {
+            alert("Errore nel salvataggio: " + insertError.message);
+          } else {
+            setBookingSuccess(true);
+            setReservedSpots(prev => [...prev, matchingSpot.id]);
+            scaricaRicevutaAutomatica(selectedSpotNumber);
+          }
+        } catch (err: any) {
+          alert("Errore DB: " + err.message);
+        } finally {
+          setPaymentProcessing(false);
+          setIsSubmitting(false);
+        }
+      }, 3000);
 
     } catch (err: any) {
       alert(err.message || "Si è verificato un errore critico durante la transazione.");
