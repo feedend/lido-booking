@@ -30,7 +30,7 @@ export default function Home() {
           Stabilimento Balneare Santa Severa
         </h1>
         <p className="text-sm text-slate-500 font-medium mt-1">
-          • Sistema di Prenotazione •
+          • System di Prenotazione •
         </p>
       </div>
 
@@ -73,10 +73,10 @@ export default function Home() {
                   Profilo: {userData.categoria}
                 </span>
                 
-                {/* Mostra il badge degli extra nel riepilogo solo se sono stati selezionati */}
+                {/* Modificato extraSpiaggine in extraLettini e aggiornato il testo in Lettini */}
                 {userData.prezzoExtra > 0 && (
                   <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-4 py-1 rounded-full uppercase tracking-tight border border-emerald-100">
-                    Extra: {userData.extraSdraio > 0 ? `${userData.extraSdraio} Sdraio ` : ''}{userData.extraSpiaggine > 0 ? `${userData.extraSpiaggine} Spiaggine` : ''} (+€{userData.prezzoExtra.toFixed(2)})
+                    Extra: {userData.extraSdraio > 0 ? `${userData.extraSdraio} Sdraio ` : ''}{(userData as any).extraLettini > 0 ? `${(userData as any).extraLettini} Lettini` : ''} (+€{userData.prezzoExtra.toFixed(2)})
                   </span>
                 )}
               </div>
@@ -110,7 +110,7 @@ export default function Home() {
         {step === 3 && userData && (
           <BeachMap 
             selectedDate={selectedDate} 
-            userData={userData} 
+            userData={userData as any} 
           />
         )}
       </div>
