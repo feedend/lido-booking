@@ -5,21 +5,16 @@ import Stripe from 'stripe';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
 
 export async function POST(request: Request) {
-  apiVersion: '2025-01-27' as any, // Adatta la versione se necessario
-});
-
-export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { selectedDate, selectedSpotNumber, userData, prezzoFinale } = body;
 
-    // 1. Validazione di sicurezza (Prezzo calcolato lato server per evitare manomissioni)
-    // In produzione ricalcoleresti il prezzo qui, ma per il test usiamo quello passato o un calcolo rapido.
+    // 1. Validazione di sicurezza (Prezzo convertito in centesimi per Stripe)
     const importoInCentesimi = Math.round(prezzoFinale * 100); 
 
     // 2. Creazione della sessione di Stripe Checkout
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'], // Puoi aggiungere 'paypal', 'google_pay' ecc. dalla dashboard di Stripe
+      payment_method_types: ['card'], // Puoi abilitare altri metodi (es. bancomat, apple pay) dalla dashboard Stripe
       mode: 'payment',
       line_items: [
         {
