@@ -20,7 +20,7 @@ type BeachMapProps = {
     categoria: string;
     telefono?: string;
     extraSdraio: number;    
-    extraSpiaggine: number;  
+    extraLettini: number; // Modificato da extraSpiaggine a extraLettini
     prezzoExtra: number;     
   };
 };
@@ -152,7 +152,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     ctx.font = '13px sans-serif';
     ctx.fillStyle = '#64748b';
     ctx.fillText('• 1 Ombrellone Standard (Incluso)', 50, 280);
-    ctx.fillText('• 1 Lettino (Incluso)', 50, 300);
+    ctx.fillText('• 1 Lettino Standard (Incluso)', 50, 300);
 
     let currentY = 320;
     if (userData.extraSdraio > 0) {
@@ -161,10 +161,10 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       ctx.fillText(`• ${userData.extraSdraio} Sdraio EXTRA`, 50, currentY);
       currentY += 20;
     }
-    if (userData.extraSpiaggine > 0) {
+    if (userData.extraLettini > 0) {
       ctx.fillStyle = '#16a34a';
       ctx.font = 'bold 13px sans-serif';
-      ctx.fillText(`• ${userData.extraSpiaggine} Spiaggine EXTRA`, 50, currentY);
+      ctx.fillText(`• ${userData.extraLettini} Lettini EXTRA`, 50, currentY);
     }
 
     const qrImg = new Image();
@@ -182,6 +182,13 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
   const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
+    
+    // 1. Controllo di sicurezza stringente sugli Extra (Max 3 pezzi combinati)
+    const extraTotati = (userData.extraSdraio || 0) + (userData.extraLettini || 0);
+    if (extraTotati > 3) {
+      alert("Configurazione extra non valida. Puoi selezionare al massimo 3 pezzi totali tra Sdraio e Lettini aggiuntivi.");
+      return;
+    }
     
     setIsSubmitting(true);
     setPaymentProcessing(true);
@@ -258,7 +265,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
               utenti: userData.numUtenti,
               categoria: userData.categoria,
               extraSdraio: userData.extraSdraio,
-              extraSpiaggine: userData.extraSpiaggine,
+              extraLettini: userData.extraLettini,
               prezzoExtra: userData.prezzoExtra
             }),
           });
@@ -303,8 +310,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     const isDeactivatedByAdmin = correspondingDbSpot.is_available === false;
     const isReserved = isDbReserved || isDeactivatedByAdmin;
     const isSelected = selectedSpotNumber === num;
-    
-    // Controllo se questo ombrellone appartiene ai posti riservati disabili
     const isDisabili = POSTI_DISABILI.includes(num);
 
     return (
@@ -329,7 +334,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
           <path d="M11.5 12h1v9h-1z" fill="#94a3b8" />
         </svg>
 
-        {/* Numero dell'ombrellone. Se è per disabili, l'altezza della riga si riduce leggermente */}
         <span className={`text-[9px] font-black mt-0.5 px-1 rounded bg-white/90 shadow-sm border transition-all flex items-center gap-0.5
           ${isReserved 
             ? 'text-gray-400 border-gray-200' 
@@ -435,7 +439,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         </div>
       </div>
 
-      {/* Modale con Micro-Interazione Onda del Mare */}
+      {/* Modale Riepilogo */}
       {selectedSpotNumber !== null && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity duration-200">
           <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl text-center border border-slate-100 overflow-hidden relative animate-modal">
@@ -471,9 +475,9 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                       
                       <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200 text-[11px]">
                         <p className="font-bold text-slate-400 uppercase text-[9px] tracking-wider mb-1">Riepilogo Consegna:</p>
-                        <p>• 1 Ombrellone + 1 Sdraio (Base)</p>
+                        <p>• 1 Ombrellone + 1 Lettino (Base)</p>
                         {userData.extraSdraio > 0 && <p className="text-emerald-600 font-semibold">• {userData.extraSdraio} Sdraio Extra</p>}
-                        {userData.extraSpiaggine > 0 && <p className="text-emerald-600 font-semibold">• {userData.extraSpiaggine} Spiaggine Extra</p>}
+                        {userData.extraLettini > 0 && <p className="text-emerald-600 font-semibold">• {userData.extraLettini} {userData.extraLettini === 1 ? 'Lettino' : 'Lettini'} Extra</p>}
                       </div>
                     </div>
                   </div>
@@ -503,7 +507,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                     <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} persone</p>
                     {userData.prezzoExtra > 0 && (
                       <p className="border-b border-slate-200/60 pb-1 text-emerald-600 font-medium">
-                        <strong>Attrezzatura Extra:</strong> {userData.extraSdraio > 0 ? `${userData.extraSdraio} Sdraio ` : ''}{userData.extraSpiaggine > 0 ? `${userData.extraSpiaggine} Spiaggine` : ''} (+ {userData.prezzoExtra.toFixed(2)}€)
+                        <strong>Attrezzatura Extra:</strong> {userData.extraSdraio > 0 ? `${userData.extraSdraio} Sdraio ` : ''}{userData.extraLettini > 0 ? `${userData.extraLettini} Lettini` : ''} (+ {userData.prezzoExtra.toFixed(2)}€)
                       </p>
                     )}
                     <p><strong>Tariffa:</strong> {userData.categoria} {POSTI_DISABILI.includes(selectedSpotNumber) ? '(Postazione Accessibile)' : ''}</p>
