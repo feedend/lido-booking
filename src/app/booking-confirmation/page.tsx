@@ -45,22 +45,23 @@ function BookingConfirmationContent() {
           return;
         }
 
-        const { error: insertError } = await supabase
-          .from('bookings')
-          .insert([{
-            spot_id: meta.spot_id,
-            booking_date: meta.booking_date,
-            guest_nome: meta.guest_nome,
-            guest_cognome: meta.guest_cognome,
-            guest_email: meta.guest_email,
-            guest_phone: meta.guest_phone || null,
-            num_guests: parseInt(meta.num_guests),
-            booking_category: meta.booking_category,
-            extra_sdraio: parseInt(meta.extra_sdraio),
-            extra_lettini: parseInt(meta.extra_lettini),
-            total_price: parseFloat(meta.total_price),
-            status: 'confirmed'
-          }]);
+       const { error: insertError } = await supabase
+  .from('bookings')
+  .insert([{
+    spot_id: meta.spot_id,
+    booking_date: meta.booking_date,
+    guest_first_name: meta.guest_nome, // Mappato su guest_first_name
+    guest_last_name: meta.guest_cognome, // Mappato su guest_last_name
+    guest_email: meta.guest_email,
+    guest_phone: meta.guest_phone || null,
+    num_guests: parseInt(meta.num_guests),
+    booking_category: meta.booking_category,
+    // Ricordati che extra_sdraio e extra_lettini vanno comunque aggiunti al DB!
+    extra_sdraio: parseInt(meta.extra_sdraio), 
+    extra_lettini: parseInt(meta.extra_lettini),
+    total_price: parseFloat(meta.total_price),
+    status: 'confirmed'
+  }]);
 
         if (insertError) throw insertError;
 
