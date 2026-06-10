@@ -1,11 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
-// Queste variabili verranno lette dal file .env che hai già nel progetto
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("ATTENZIONE: Mancano le chiavi di Supabase nel file .env");
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Questa funzione crea un client che legge e scrive automaticamente i cookie
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey);
