@@ -1,0 +1,13 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/admin/dashboard/opdashboard/page": "app/admin/dashboard/opdashboard/page.js",
+  "/admin/dashboard/operatordashboard/page": "app/admin/dashboard/operatordashboard/page.js",
+  "/admin/dashboard/page": "app/admin/dashboard/page.js",
+  "/admin/login/page": "app/admin/login/page.js",
+  "/admin/prenotazioni/page": "app/admin/prenotazioni/page.js",
+  "/api/checkout-session/route": "app/api/checkout-session/route.js",
+  "/api/verify-session/route": "app/api/verify-session/route.js",
+  "/booking-confirmation/page": "app/booking-confirmation/page.js",
+  "/page": "app/page.js",
+  "/api/send-email/route": "app/api/send-email/route.js"
+}
