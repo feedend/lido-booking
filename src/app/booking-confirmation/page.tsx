@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
@@ -8,7 +8,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-export default function BookingConfirmationPage() {
+// 1. Spostiamo tutta la logica all'interno di un componente interno
+function BookingConfirmationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const sessionId = searchParams.get('session_id');
@@ -23,14 +24,12 @@ export default function BookingConfirmationPage() {
 
     const finalizeBooking = async () => {
       try {
-        // 1. Recupera i dettagli della sessione direttamente da Stripe per sicurezza
         const res = await fetch(`/api/verify-session?session_id=${sessionId}`);
         if (!res.ok) throw new Error("Verifica sessione fallita");
         
         const sessionData = await res.json();
         const meta = sessionData.metadata;
 
-        // 2. Controllo idempotenza: verifica se la prenotazione per questa sessione Stripe esiste già
         const { data: existing } = await supabase
           .from('bookings')
           .select('id')
@@ -46,7 +45,6 @@ export default function BookingConfirmationPage() {
           return;
         }
 
-        // 3. Salvataggio definitivo a database su Supabase
         const { error: insertError } = await supabase
           .from('bookings')
           .insert([{
@@ -66,7 +64,6 @@ export default function BookingConfirmationPage() {
 
         if (insertError) throw insertError;
 
-        // 4. Invio notifica Email
         try {
           await fetch('/api/send-email', {
             method: 'POST',
@@ -82,7 +79,7 @@ export default function BookingConfirmationPage() {
               categoria: meta.booking_category,
               extraSdraio: parseInt(meta.extra_sdraio),
               extraLettini: parseInt(meta.extra_lettini),
-              prezzoExtra: 0 // Gestito nel totale
+              prezzoExtra: 0
             }),
           });
         } catch (emailErr) {
@@ -92,7 +89,6 @@ export default function BookingConfirmationPage() {
         setBookingDetails(meta);
         setStatus('success');
 
-        // 5. Trigger download automatico ricevuta
         setTimeout(() => {
           scaricaRicevutaAutomatica(meta);
         }, 800);
@@ -215,7 +211,7 @@ export default function BookingConfirmationPage() {
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
         <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-3xl mb-4 shadow-sm">✕</div>
         <h2 className="text-xl font-black text-slate-800 uppercase tracking-wide">Qualcosa è andato storto</h2>
-        <p className="text-sm text-slate-500 max-w-sm mt-2 mb-6">Si è verificato un errore durante la registrazione della prenotazione. Contatta l'assistenza indicando il codice di sessione.</p>
+        <p className="text-sm text-slate-500 max-w-sm mt-2 mb-6">Si è verificato un errore durante la registrazione della prenotazione. Contatta l'assistenza.</p>
         <button onClick={() => router.push('/')} className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 px-6 rounded-xl text-xs uppercase tracking-wider shadow">Torna alla Home</button>
       </div>
     );
@@ -263,5 +259,19 @@ export default function BookingConfirmationPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// 2. L'export di default della pagina avvolge il contenuto dentro <Suspense>
+export default function BookingConfirmationPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mb-4"></div>
+        <h2 className="text-lg font-bold text-slate-700">Inizializzazione sessione di conferma...</h2>
+      </div>
+    }>
+      <BookingConfirmationContent />
+    </Suspense>
   );
 }
