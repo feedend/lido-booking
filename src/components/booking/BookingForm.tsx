@@ -207,7 +207,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
             <div className="mb-4 text-sm text-slate-600">
   Prima di procedere, ti invitiamo a leggere il nostro{' '}
   <a 
-    href="/Regolamento_ed_2006.pdf" 
+    href="/Regolamento_ed_2026.pdf" 
     target="_blank" 
     rel="noopener noreferrer"
     className="text-blue-600 font-bold underline hover:text-blue-800 transition-colors"
