@@ -77,7 +77,7 @@ export default function Home() {
           Stabilimento Balneare Santa Severa
         </h1>
         <p className="text-sm text-slate-500 font-medium mt-1">
-          • System di Prenotazione •
+          • Sistema di Prenotazione •
         </p>
       </div>
 
