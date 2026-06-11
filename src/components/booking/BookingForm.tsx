@@ -204,6 +204,18 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
           <p className="font-bold uppercase tracking-wide text-[10px] text-red-600 mt-1">La prenotazione NON è rimborsabile</p>
         </div>
 
+            <div className="mb-4 text-sm text-slate-600">
+  Prima di procedere, ti invitiamo a leggere il nostro{' '}
+  <a 
+    href="/regolamento_ed2006.pdf" 
+    target="_blank" 
+    rel="noopener noreferrer"
+    className="text-blue-600 font-bold underline hover:text-blue-800 transition-colors"
+  >
+    Regolamento Ufficiale
+  </a>.
+</div>
+        
         {/* --- CHECKBOX CONFERMA REGOLAMENTO 2026 --- */}
         <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-start gap-3">
           <input
@@ -218,18 +230,6 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
             Dichiaro di aver letto e di accettare integralmente il <strong className="text-slate-900 font-semibold">Regolamento dello Stabilimento ed. 2026</strong> in tutte le sue parti.
           </label>
         </div>
-        
-        <div className="mb-4 text-sm text-slate-600">
-  Prima di procedere, ti invitiamo a leggere il nostro{' '}
-  <a 
-    href="/regolamento-lido.pdf" 
-    target="_blank" 
-    rel="noopener noreferrer"
-    className="text-blue-600 font-bold underline hover:text-blue-800 transition-colors"
-  >
-    Regolamento Ufficiale
-  </a>.
-</div>
         
         <button 
           type="submit" 
