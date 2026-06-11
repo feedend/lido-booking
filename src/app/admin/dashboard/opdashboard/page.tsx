@@ -99,7 +99,7 @@ export default function OperatorDashboard() {
     }
   };
 
-  // Logica core di validazione e annullamento sul database (Invariata, ottimizzata nei log)
+// Logica core di validazione e annullamento sul database (Aggiornata per QR scaduti)
   const validaEInvalidaTicket = async (qrData: string) => {
     setLoading(true);
     setVerificationStatus(null);
@@ -177,6 +177,16 @@ export default function OperatorDashboard() {
         return;
       }
 
+      // --- NUOVA LOGICA: CONTROLLO DATA SCADUTA ---
+      // Azzeriamo le ore per fare un confronto pulito tra i giorni
+      const bookingDateObj = new Date(booking.booking_date);
+      bookingDateObj.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const isExpired = bookingDateObj < today;
+
+      // Eseguiamo COMUNQUE l'aggiornamento a database per "bruciare" il biglietto
       const { error: updateError } = await supabase
         .from('bookings')
         .update({ status: 'checked_in' })
@@ -186,19 +196,36 @@ export default function OperatorDashboard() {
         throw new Error("Impossibile aggiornare lo stato di check-in: " + updateError.message);
       }
 
-      setVerificationStatus({
-        success: true,
-        message: "✅ INGRESSO AUTORIZZATO! Biglietto validato correttamente.",
-        details: {
-          id: booking.id,
-          booking_date: booking.booking_date,
-          internal_code: postoPart,
-          guest_name: `${booking.guest_first_name} ${booking.guest_last_name}`,
-          guest_email: booking.guest_email,
-          booking_category: booking.booking_category,
-          status: 'CHECKED-IN (In Spiaggia)'
-        }
-      });
+      // Risposta condizionale basata sulla validità temporale
+      if (isExpired) {
+        setVerificationStatus({
+          success: false, // false così diventa rosso e l'operatore blocca l'ospite
+          message: `⚠️ DATA SCADUTA! Prenotazione del ${bookingDateObj.toLocaleDateString('it-IT')}. Il biglietto è stato comunque ANNULLATO nel database per sicurezza.`,
+          details: {
+            id: booking.id,
+            booking_date: booking.booking_date,
+            internal_code: postoPart,
+            guest_name: `${booking.guest_first_name} ${booking.guest_last_name}`,
+            guest_email: booking.guest_email,
+            booking_category: booking.booking_category,
+            status: 'SCADUTO E ANNULLATO'
+          }
+        });
+      } else {
+        setVerificationStatus({
+          success: true, // true così diventa verde
+          message: "✅ INGRESSO AUTORIZZATO! Biglietto validato correttamente.",
+          details: {
+            id: booking.id,
+            booking_date: booking.booking_date,
+            internal_code: postoPart,
+            guest_name: `${booking.guest_first_name} ${booking.guest_last_name}`,
+            guest_email: booking.guest_email,
+            booking_category: booking.booking_category,
+            status: 'CHECKED-IN (In Spiaggia)'
+          }
+        });
+      }
 
     } catch (err: any) {
       setVerificationStatus({
