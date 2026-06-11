@@ -219,6 +219,18 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
           </label>
         </div>
         
+        <div className="mb-4 text-sm text-slate-600">
+  Prima di procedere, ti invitiamo a leggere il nostro{' '}
+  <a 
+    href="/regolamento-lido.pdf" 
+    target="_blank" 
+    rel="noopener noreferrer"
+    className="text-blue-600 font-bold underline hover:text-blue-800 transition-colors"
+  >
+    Regolamento Ufficiale
+  </a>.
+</div>
+        
         <button 
           type="submit" 
           disabled={!accettaRegolamento}
