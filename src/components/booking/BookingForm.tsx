@@ -139,7 +139,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
             <option value="Esercito in quiescenza">Esercito in quiescenza</option>
             <option value="Altra Forza Armata">Altra Forza Armata</option>            
             <option value="Esercito - Parenti">Esercito - Parenti 2° Grado</option>
-            <option value="Giornaliero">Giornaliero </option>
+            <option value="Giornaliero">Pubblica Amministrazione </option>
           </select>
         </div>
 
