@@ -7,7 +7,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-const POSTI_DISABILI = [30, 51, 70, 91, 110];
+const POSTI_DISABILI = [30, 51, 70, 91, 110, 130];
 
 type BeachMapProps = {
   selectedDate: string;
