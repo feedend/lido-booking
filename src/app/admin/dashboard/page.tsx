@@ -13,7 +13,8 @@ import {
   User,
   QrCode,
   Euro,
-  Sun
+  Sun,
+  CreditCard
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -54,6 +55,9 @@ export default function AdminDashboard() {
   const [blockType, setBlockType] = useState<'permanent' | 'daily'>('daily');
   const [dailyPrice, setDailyPrice] = useState<string>('');
   const [dailyNotes, setDailyNotes] = useState<string>('Blocco Giornaliero');
+  
+  // Scelta 1: Stato per il tracciamento del metodo di pagamento in loco
+  const [paymentMethod, setPaymentMethod] = useState<'Contanti' | 'POS' | 'Altro'>('Contanti');
 
   const router = useRouter();
 
@@ -190,6 +194,9 @@ export default function AdminDashboard() {
       return;
     }
 
+    // Uniamo la nota testuale al metodo di pagamento scelto
+    const noteFinali = `[Metodo: ${paymentMethod}] ${dailyNotes || 'Assegnato direttamente sul posto'}`;
+
     const { error: upsertErr } = await supabase
       .from('bookings')
       .upsert({
@@ -200,7 +207,7 @@ export default function AdminDashboard() {
         booking_category: 'Giornaliero in loco',
         status: 'confirmed',
         total_price: parseFloat(dailyPrice) || 0,
-        notes: dailyNotes || 'Assegnato direttamente sul posto'
+        notes: noteFinali
       }, { 
         onConflict: 'spot_id, booking_date' 
       });
@@ -210,6 +217,7 @@ export default function AdminDashboard() {
     } else {
       setDailyPrice('');
       setDailyNotes('Blocco Giornaliero');
+      setPaymentMethod('Contanti'); // Reset del metodo di pagamento
       fetchData();
       setSelectedSpot(null);
     }
@@ -234,7 +242,7 @@ export default function AdminDashboard() {
     .filter(b => b.booking_category === 'Giornaliero in loco')
     .reduce((sum, b) => sum + (b.total_price || 0), 0);
 
-  // Funzione helper per renderizzare il singolo bottone (utilizzabile sia per Ombrelloni che per Solarium)
+  // Funzione helper per renderizzare il singolo bottone
   const renderGenericSpotButton = (codeString: string, displayLabel: string) => {
     const correspondingSpot = spots.find(s => {
       if (!s.internal_code) return false;
@@ -372,7 +380,7 @@ export default function AdminDashboard() {
       <main className="max-w-[1400px] mx-auto p-4 md:p-6 space-y-6">
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
           
-          {/* COLONNA SINISTRA: MAPPE (SPIAGGIA + SOLARIUM) */}
+          {/* COLONNA SINISTRA: MAPPE */}
           <div className="xl:col-span-3 space-y-6">
             
             {/* MAPPA SPIAGGIA */}
@@ -398,7 +406,6 @@ export default function AdminDashboard() {
                   rows.map((row, rowIndex) => (
                     <div key={rowIndex} className="flex items-center justify-start gap-4">
                       
-                      {/* Settore Sinistro */}
                       <div className="w-[420px] grid grid-cols-10 gap-1 justify-items-start">
                         {row.startL ? (
                           <>
@@ -412,12 +419,10 @@ export default function AdminDashboard() {
                         )}
                       </div>
                       
-                      {/* Passerella Centrale */}
                       <div className="w-14 shrink-0 flex justify-center items-center font-black text-slate-500 uppercase text-[9px] tracking-widest bg-slate-950 py-2 rounded-xl border border-slate-800 shadow-inner text-center">
                         {row.center || "•"}
                       </div>
                       
-                      {/* Settore Destro */}
                       <div className="w-[420px] grid grid-cols-10 gap-1 justify-items-start">
                         {row.startR ? (
                           <>
@@ -437,11 +442,11 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* BOX SOLARIUM (Aggiunto qui sotto in modo nativo ed elegante) */}
+            {/* BOX SOLARIUM */}
             <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4 shadow-xl">
               <div className="border-b border-slate-800 pb-4">
                 <h2 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
-                  <Sun className="h-4 w-4 text-amber-400 animate-spin-slow" /> Area Solarium Terrazza
+                  <Sun className="h-4 w-4 text-amber-400" /> Area Solarium Terrazza
                 </h2>
                 <p className="text-[11px] text-slate-400 mt-0.5">Gestione 11 Lettini Esclusivi in Loco</p>
               </div>
@@ -565,9 +570,29 @@ export default function AdminDashboard() {
                               className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 pl-7 text-xs text-white focus:outline-none focus:border-orange-500 font-mono font-bold"
                             />
                           </div>
+
+                          {/* SCELTA 1: Selettore del metodo di pagamento in loco */}
+                          <div className="space-y-1">
+                            <label className="text-[9px] uppercase font-black text-slate-500 flex items-center gap-1">
+                              <CreditCard className="w-3 h-3" /> Metodo Pagamento
+                            </label>
+                            <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-900 border border-slate-800 rounded-xl">
+                              {(['Contanti', 'POS', 'Altro'] as const).map((method) => (
+                                <button
+                                  key={method}
+                                  type="button"
+                                  onClick={() => setPaymentMethod(method)}
+                                  className={`py-1 text-[10px] font-bold rounded-lg transition ${paymentMethod === method ? 'bg-slate-800 border border-slate-700 text-emerald-400 font-black' : 'text-slate-500 hover:text-slate-300'}`}
+                                >
+                                  {method}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
                           <input 
                             type="text" 
-                            placeholder="Note aggiuntive (es. Contanti, POS)..."
+                            placeholder="Note aggiuntive..."
                             value={dailyNotes}
                             onChange={(e) => setDailyNotes(e.target.value)}
                             className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-orange-500 font-medium"
