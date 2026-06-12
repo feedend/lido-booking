@@ -14,7 +14,9 @@ import {
   QrCode,
   Euro,
   Sun,
-  CreditCard
+  CreditCard,
+  Banknote,
+  Wallet
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -55,13 +57,10 @@ export default function AdminDashboard() {
   const [blockType, setBlockType] = useState<'permanent' | 'daily'>('daily');
   const [dailyPrice, setDailyPrice] = useState<string>('');
   const [dailyNotes, setDailyNotes] = useState<string>('Blocco Giornaliero');
-  
-  // Scelta 1: Stato per il tracciamento del metodo di pagamento in loco
   const [paymentMethod, setPaymentMethod] = useState<'Contanti' | 'POS' | 'Altro'>('Contanti');
 
   const router = useRouter();
 
-  // Struttura geometrica 1:1 con il client pubblico
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "P" },
@@ -76,7 +75,6 @@ export default function AdminDashboard() {
     { startL: null, endL: null, startR: 172, endR: 174, center: "A" },
   ];
 
-  // Generiamo l'array per gli 11 lettini del Solarium (S1, S2, ..., S11)
   const solariumBeds = Array.from({ length: 11 }, (_, i) => `S${i + 1}`);
 
   const fetchData = async () => {
@@ -194,7 +192,6 @@ export default function AdminDashboard() {
       return;
     }
 
-    // Uniamo la nota testuale al metodo di pagamento scelto
     const noteFinali = `[Metodo: ${paymentMethod}] ${dailyNotes || 'Assegnato direttamente sul posto'}`;
 
     const { error: upsertErr } = await supabase
@@ -217,7 +214,7 @@ export default function AdminDashboard() {
     } else {
       setDailyPrice('');
       setDailyNotes('Blocco Giornaliero');
-      setPaymentMethod('Contanti'); // Reset del metodo di pagamento
+      setPaymentMethod('Contanti');
       fetchData();
       setSelectedSpot(null);
     }
@@ -237,12 +234,25 @@ export default function AdminDashboard() {
     }
   };
 
+  // --- LOGICA DI CONTEGGIO FINANZIARIO DIVISO ---
   const totaleGenerale = bookings.reduce((sum, b) => sum + (b.total_price || 0), 0);
-  const totaleGiornalieriInLoco = bookings
-    .filter(b => b.booking_category === 'Giornaliero in loco')
+  
+  const giornalieriInLoco = bookings.filter(b => b.booking_category === 'Giornaliero in loco');
+  
+  const totaleGiornalieriInLoco = giornalieriInLoco.reduce((sum, b) => sum + (b.total_price || 0), 0);
+  
+  const totaleContanti = giornalieriInLoco
+    .filter(b => b.notes?.includes('[Metodo: Contanti]'))
     .reduce((sum, b) => sum + (b.total_price || 0), 0);
 
-  // Funzione helper per renderizzare il singolo bottone
+  const totalePOS = giornalieriInLoco
+    .filter(b => b.notes?.includes('[Metodo: POS]'))
+    .reduce((sum, b) => sum + (b.total_price || 0), 0);
+
+  const totaleAltro = giornalieriInLoco
+    .filter(b => b.notes?.includes('[Metodo: Altro]'))
+    .reduce((sum, b) => sum + (b.total_price || 0), 0);
+
   const renderGenericSpotButton = (codeString: string, displayLabel: string) => {
     const correspondingSpot = spots.find(s => {
       if (!s.internal_code) return false;
@@ -305,9 +315,7 @@ export default function AdminDashboard() {
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-black tracking-wider text-white uppercase">Lido Control Panel</h1>
               <span className={`text-[9px] px-1.5 py-0.5 rounded-md uppercase font-bold border ${
-                ruolo === 'admin' 
-                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' 
-                  : 'bg-blue-500/10 border-blue-500/20 text-blue-400'
+                ruolo === 'admin' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-blue-500/10 border-blue-500/20 text-blue-400'
               }`}>
                 {ruolo === 'admin' ? 'Admin' : 'Operatore'}
               </span>
@@ -352,12 +360,14 @@ export default function AdminDashboard() {
         </div>
       </nav>
 
-      {/* Box Finanziari - Visibili SOLO all'Admin */}
+      {/* Box Finanziari Dettagliati - Visibili SOLO all'Admin */}
       {ruolo === 'admin' && (
-        <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-200">
+        <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-6 grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in duration-200">
+          
+          {/* Box 1: Incasso Generale */}
           <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
             <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Incasso Totale Giorno</p>
+              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Incasso Totale Giorno (Online+Loco)</p>
               <p className="text-2xl font-mono font-black text-emerald-400 mt-1">{totaleGenerale.toFixed(2)} €</p>
             </div>
             <div className="bg-emerald-500/10 p-3 rounded-xl text-emerald-400">
@@ -365,15 +375,42 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          {/* Box 2: Totale In Loco */}
           <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
             <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Giornalieri in Loco</p>
+              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Totale Giornalieri in Loco</p>
               <p className="text-2xl font-mono font-black text-orange-400 mt-1">{totaleGiornalieriInLoco.toFixed(2)} €</p>
             </div>
             <div className="bg-orange-500/10 p-3 rounded-xl text-orange-400">
-              <Euro className="w-5 h-5" />
+              <Wallet className="w-5 h-5" />
             </div>
           </div>
+
+          {/* Box 3: Breakdown Metodi di Pagamento in Loco */}
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col justify-center shadow-lg space-y-2">
+            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Dettaglio Cassa in Loco</p>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-slate-950 p-2 rounded-xl border border-slate-850">
+                <span className="text-[9px] font-black uppercase text-slate-500 flex items-center justify-center gap-1">
+                  <Banknote className="w-3 h-3 text-emerald-500" /> Contanti
+                </span>
+                <p className="text-sm font-mono font-bold text-slate-200 mt-0.5">{totaleContanti.toFixed(2)} €</p>
+              </div>
+              <div className="bg-slate-950 p-2 rounded-xl border border-slate-850">
+                <span className="text-[9px] font-black uppercase text-slate-500 flex items-center justify-center gap-1">
+                  <CreditCard className="w-3 h-3 text-blue-500" /> POS
+                </span>
+                <p className="text-sm font-mono font-bold text-slate-200 mt-0.5">{totalePOS.toFixed(2)} €</p>
+              </div>
+              <div className="bg-slate-950 p-2 rounded-xl border border-slate-850">
+                <span className="text-[9px] font-black uppercase text-slate-500 flex items-center justify-center gap-1">
+                  <Euro className="w-3 h-3 text-amber-500" /> Altro
+                </span>
+                <p className="text-sm font-mono font-bold text-slate-200 mt-0.5">{totaleAltro.toFixed(2)} €</p>
+              </div>
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -571,7 +608,6 @@ export default function AdminDashboard() {
                             />
                           </div>
 
-                          {/* SCELTA 1: Selettore del metodo di pagamento in loco */}
                           <div className="space-y-1">
                             <label className="text-[9px] uppercase font-black text-slate-500 flex items-center gap-1">
                               <CreditCard className="w-3 h-3" /> Metodo Pagamento
