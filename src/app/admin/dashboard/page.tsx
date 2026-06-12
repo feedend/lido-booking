@@ -12,7 +12,8 @@ import {
   Umbrella,
   User,
   QrCode,
-  Euro 
+  Euro,
+  Sun
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -71,6 +72,9 @@ export default function AdminDashboard() {
     { startL: null, endL: null, startR: 172, endR: 174, center: "A" },
   ];
 
+  // Generiamo l'array per gli 11 lettini del Solarium (S1, S2, ..., S11)
+  const solariumBeds = Array.from({ length: 11 }, (_, i) => `S${i + 1}`);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -128,7 +132,7 @@ export default function AdminDashboard() {
         .eq('id', spotId);
 
       if (unblockErr) {
-        alert("Errore riattivazione ombrellone: " + unblockErr.message);
+        alert("Errore riattivazione postazione: " + unblockErr.message);
       } else {
         setNoteBlock('');
         fetchData();
@@ -166,7 +170,7 @@ export default function AdminDashboard() {
         .single();
 
       if (createErr) {
-        alert("Errore inizializzazione ombrellone: " + createErr.message);
+        alert("Errore inizializzazione postazione: " + createErr.message);
         return;
       }
       finalSpotId = newSpot.id;
@@ -181,7 +185,7 @@ export default function AdminDashboard() {
     });
 
     if (isOnlineBookingActive) {
-      alert("Impossibile sovrascrivere: su questo ombrellone è presente una prenotazione ONLINE attiva. Per liberarlo, annullala dal Registro.");
+      alert("Impossibile sovrascrivere: su questa postazione è presente una prenotazione ONLINE attiva. Per liberarla, annullala dal Registro.");
       setSelectedSpot(null);
       return;
     }
@@ -230,11 +234,13 @@ export default function AdminDashboard() {
     .filter(b => b.booking_category === 'Giornaliero in loco')
     .reduce((sum, b) => sum + (b.total_price || 0), 0);
 
-  const renderAdminSpot = (num: number) => {
+  // Funzione helper per renderizzare il singolo bottone (utilizzabile sia per Ombrelloni che per Solarium)
+  const renderGenericSpotButton = (codeString: string, displayLabel: string) => {
     const correspondingSpot = spots.find(s => {
       if (!s.internal_code) return false;
       const cleanDbCode = s.internal_code.toString().trim().replace(/^0+/, '');
-      return cleanDbCode === num.toString();
+      const cleanTargetCode = codeString.trim().replace(/^0+/, '');
+      return cleanDbCode === cleanTargetCode;
     });
 
     const booking = correspondingSpot ? bookings.find(b => b.spot_id === correspondingSpot.id) : null;
@@ -255,24 +261,28 @@ export default function AdminDashboard() {
 
     const spotDataData = correspondingSpot || {
       id: '',
-      internal_code: num.toString(),
+      internal_code: codeString,
       is_available: true,
       notes: null
     };
 
     return (
       <button
-        key={num}
+        key={codeString}
         type="button"
         onClick={() => setSelectedSpot({ ...spotDataData, _booking: booking })}
-        className={`w-9 h-11 border text-[11px] rounded-lg flex items-center justify-center font-black transition relative ${btnClass} ${selectedSpot?.internal_code === num.toString() ? 'ring-2 ring-blue-500 border-transparent shadow-lg shadow-blue-500/20 scale-105' : ''}`}
+        className={`w-9 h-11 border text-[11px] rounded-lg flex items-center justify-center font-black transition relative ${btnClass} ${selectedSpot?.internal_code === codeString ? 'ring-2 ring-blue-500 border-transparent shadow-lg shadow-blue-500/20 scale-105' : ''}`}
       >
-        {num}
+        {displayLabel}
         {isBooked && (
           <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse ${isDailyLocalBlock ? 'bg-orange-400' : 'bg-red-500'}`} />
         )}
       </button>
     );
+  };
+
+  const renderAdminSpot = (num: number) => {
+    return renderGenericSpotButton(num.toString(), num.toString());
   };
 
   return (
@@ -362,78 +372,103 @@ export default function AdminDashboard() {
       <main className="max-w-[1400px] mx-auto p-4 md:p-6 space-y-6">
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
           
-          {/* MAPPA SPIAGGIA */}
-          <div className="xl:col-span-3 bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4 shadow-xl overflow-x-auto">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-3 min-w-[920px]">
-              <h2 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
-                <Umbrella className="h-4 w-4 text-orange-500" /> Disposizione Speculare Spiaggia
-              </h2>
-              <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-wider">
-                <span className="flex items-center gap-1.5 text-emerald-400"><span className="w-2.5 h-2.5 rounded-md bg-emerald-500/10 border border-emerald-500/30"></span> Attivo</span>
-                <span className="flex items-center gap-1.5 text-red-400"><span className="w-2.5 h-2.5 rounded-md bg-red-500/20 border border-red-500/50"></span> Occupato</span>
-                <span className="flex items-center gap-1.5 text-orange-400"><span className="w-2.5 h-2.5 rounded-md bg-orange-500/20 border border-orange-500/60"></span> Giornaliero Loco</span>
-                <span className="flex items-center gap-1.5 text-amber-400"><span className="w-2.5 h-2.5 rounded-md bg-amber-500/20 border border-amber-500/60"></span> Bloccato Permanente</span>
+          {/* COLONNA SINISTRA: MAPPE (SPIAGGIA + SOLARIUM) */}
+          <div className="xl:col-span-3 space-y-6">
+            
+            {/* MAPPA SPIAGGIA */}
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4 shadow-xl overflow-x-auto">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-3 min-w-[920px]">
+                <h2 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                  <Umbrella className="h-4 w-4 text-orange-500" /> Disposizione Speculare Spiaggia
+                </h2>
+                <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-wider">
+                  <span className="flex items-center gap-1.5 text-emerald-400"><span className="w-2.5 h-2.5 rounded-md bg-emerald-500/10 border border-emerald-500/30"></span> Attivo</span>
+                  <span className="flex items-center gap-1.5 text-red-400"><span className="w-2.5 h-2.5 rounded-md bg-red-500/20 border border-red-500/50"></span> Occupato</span>
+                  <span className="flex items-center gap-1.5 text-orange-400"><span className="w-2.5 h-2.5 rounded-md bg-orange-500/20 border border-orange-500/60"></span> Giornaliero Loco</span>
+                  <span className="flex items-center gap-1.5 text-amber-400"><span className="w-2.5 h-2.5 rounded-md bg-amber-500/20 border border-amber-500/60"></span> Bloccato Permanente</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2.5 min-w-[920px] pt-2 pb-2">
+                {loading ? (
+                  <div className="text-center py-24 text-xs font-mono text-slate-500 animate-pulse uppercase tracking-widest">
+                    Sincronizzazione Layout...
+                  </div>
+                ) : (
+                  rows.map((row, rowIndex) => (
+                    <div key={rowIndex} className="flex items-center justify-start gap-4">
+                      
+                      {/* Settore Sinistro */}
+                      <div className="w-[420px] grid grid-cols-10 gap-1 justify-items-start">
+                        {row.startL ? (
+                          <>
+                            {Array.from({ length: 10 - (row.endL! - row.startL! + 1) }).map((_, i) => (
+                              <div key={`empty-l-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />
+                            ))}
+                            {Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderAdminSpot)}
+                          </>
+                        ) : (
+                          Array.from({ length: 10 }).map((_, i) => <div key={`blank-l-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />)
+                        )}
+                      </div>
+                      
+                      {/* Passerella Centrale */}
+                      <div className="w-14 shrink-0 flex justify-center items-center font-black text-slate-500 uppercase text-[9px] tracking-widest bg-slate-950 py-2 rounded-xl border border-slate-800 shadow-inner text-center">
+                        {row.center || "•"}
+                      </div>
+                      
+                      {/* Settore Destro */}
+                      <div className="w-[420px] grid grid-cols-10 gap-1 justify-items-start">
+                        {row.startR ? (
+                          <>
+                            {Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderAdminSpot)}
+                            {Array.from({ length: 10 - (row.endR! - row.startR! + 1) }).map((_, i) => (
+                              <div key={`empty-r-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />
+                            ))}
+                          </>
+                        ) : (
+                          Array.from({ length: 10 }).map((_, i) => <div key={`blank-r-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />)
+                        )}
+                      </div>
+
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
-            <div className="flex flex-col gap-2.5 min-w-[920px] pt-2 pb-2">
+            {/* BOX SOLARIUM (Aggiunto qui sotto in modo nativo ed elegante) */}
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4 shadow-xl">
+              <div className="border-b border-slate-800 pb-4">
+                <h2 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                  <Sun className="h-4 w-4 text-amber-400 animate-spin-slow" /> Area Solarium Terrazza
+                </h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">Gestione 11 Lettini Esclusivi in Loco</p>
+              </div>
+
               {loading ? (
-                <div className="text-center py-24 text-xs font-mono text-slate-500 animate-pulse uppercase tracking-widest">
-                  Sincronizzazione Layout...
+                <div className="text-center py-6 text-xs font-mono text-slate-500 animate-pulse uppercase tracking-widest">
+                  Caricamento Solarium...
                 </div>
               ) : (
-                rows.map((row, rowIndex) => (
-                  <div key={rowIndex} className="flex items-center justify-start gap-4">
-                    
-                    {/* Settore Sinistro */}
-                    <div className="w-[420px] grid grid-cols-10 gap-1 justify-items-start">
-                      {row.startL ? (
-                        <>
-                          {Array.from({ length: 10 - (row.endL! - row.startL! + 1) }).map((_, i) => (
-                            <div key={`empty-l-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />
-                          ))}
-                          {Array.from({ length: row.endL! - row.startL! + 1 }, (_, i) => row.startL! + i).map(renderAdminSpot)}
-                        </>
-                      ) : (
-                        Array.from({ length: 10 }).map((_, i) => <div key={`blank-l-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />)
-                      )}
-                    </div>
-                    
-                    {/* Passerella Centrale */}
-                    <div className="w-14 shrink-0 flex justify-center items-center font-black text-slate-500 uppercase text-[9px] tracking-widest bg-slate-950 py-2 rounded-xl border border-slate-800 shadow-inner text-center">
-                      {row.center || "•"}
-                    </div>
-                    
-                    {/* Settore Destro */}
-                    <div className="w-[420px] grid grid-cols-10 gap-1 justify-items-start">
-                      {row.startR ? (
-                        <>
-                          {Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderAdminSpot)}
-                          {Array.from({ length: 10 - (row.endR! - row.startR! + 1) }).map((_, i) => (
-                            <div key={`empty-r-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />
-                          ))}
-                        </>
-                      ) : (
-                        Array.from({ length: 10 }).map((_, i) => <div key={`blank-r-${i}`} className="w-9 h-11 opacity-0 pointer-events-none" />)
-                      )}
-                    </div>
-
-                  </div>
-                ))
+                <div className="flex flex-wrap gap-2 pt-1 pb-1 justify-start">
+                  {solariumBeds.map((bedCode) => renderGenericSpotButton(bedCode, bedCode))}
+                </div>
               )}
             </div>
+
           </div>
 
           {/* PANNELLO DI DETTAGLIO ED ISPEZIONE */}
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-xl space-y-4">
             <h3 className="text-xs font-black text-white uppercase tracking-wider border-b border-slate-800 pb-3">
-              Ispezione Ombrellone
+              Ispezione Postazione
             </h3>
             
             {selectedSpot ? (
               <div className="space-y-4 animate-in fade-in duration-150">
                 <div className="flex items-center justify-between bg-slate-950 p-3 rounded-2xl border border-slate-800">
-                  <span className="text-sm font-black text-white font-mono">Postazione N° {selectedSpot.internal_code}</span>
+                  <span className="text-sm font-black text-white font-mono">Codice: {selectedSpot.internal_code}</span>
                   <span className={`px-2 py-0.5 text-[9px] rounded-lg font-black uppercase border ${
                     selectedSpot._booking?.booking_category === 'Giornaliero in loco'
                       ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
@@ -564,7 +599,7 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <p className="text-slate-500 text-xs text-center py-16 font-medium italic">
-                Seleziona una postazione numerata per verificarne i bagnanti o effettuarne la chiusura.
+                Seleziona una postazione numerata o un lettino per verificarne i bagnanti o effettuarne la chiusura.
               </p>
             )}
           </div>
