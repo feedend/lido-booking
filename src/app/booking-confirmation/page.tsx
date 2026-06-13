@@ -8,7 +8,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-// 1. Spostiamo tutta la logica all'interno di un componente interno
 function BookingConfirmationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -23,94 +22,95 @@ function BookingConfirmationContent() {
     hasRun.current = true;
 
     const finalizeBooking = async () => {
-  try {
-    // 1. Chiediamo a Stripe i dati della sessione per recuperare il booking_id
-    const res = await fetch(`/api/verify-session?session_id=${sessionId}`);
-    if (!res.ok) throw new Error("Verifica sessione fallita");
-    
-    const sessionData = await res.json();
-    const bookingId = sessionData.metadata?.booking_id;
+      try {
+        // 1. Chiediamo a Stripe i dati della sessione per recuperare il booking_id
+        const res = await fetch(`/api/verify-session?session_id=${sessionId}`);
+        if (!res.ok) throw new Error("Verifica sessione fallita");
+        
+        const sessionData = await res.json();
+        const bookingId = sessionData.metadata?.booking_id;
 
-    if (!bookingId) {
-      throw new Error("ID Prenotazione non trovato nei metadati di Stripe");
-    }
+        if (!bookingId) {
+          throw new Error("ID Prenotazione non trovato nei metadati di Stripe");
+        }
 
-    // 2. Recuperiamo la prenotazione esistente unendo i dati della tabella 'spots'
-    const { data: booking, error: fetchError } = await supabase
-      .from('bookings')
-      .select(`
-        *,
-        spots (
-          internal_code
-        )
-      `)
-      .eq('id', bookingId)
-      .maybeSingle();
+        // 2. Recuperiamo la prenotazione esistente unendo i dati della tabella 'spots'
+        const { data: booking, error: fetchError } = await supabase
+          .from('bookings')
+          .select(`
+            *,
+            spots (
+              internal_code
+            )
+          `)
+          .eq('id', bookingId)
+          .maybeSingle();
 
-    if (fetchError || !booking) {
-      throw new Error("Impossibile trovare la prenotazione nel database");
-    }
+        if (fetchError || !booking) {
+          throw new Error("Impossibile trovare la prenotazione nel database");
+        }
 
-    // 3. Mappiamo i dati per renderli compatibili al 100% con il tuo Canvas e JSX
-    const fullData = {
-      ...booking,
-      guest_nome: booking.guest_nome || booking.guest_first_name || 'Ospite',
-      guest_cognome: booking.guest_cognome || booking.guest_last_name || '',
-      spot_number: booking.spots?.internal_code || 'N/D'
+        // 3. Mappiamo i dati per renderli compatibili al 100% con Canvas e JSX
+        const fullData = {
+          ...booking,
+          guest_nome: booking.guest_nome || booking.guest_first_name || 'Ospite',
+          guest_cognome: booking.guest_cognome || booking.guest_last_name || '',
+          spot_number: booking.spots?.internal_code || booking.spot_id || 'N/D'
+        };
+
+        // 4. Se la prenotazione è già confermata, mostriamo i dati senza fare doppi update
+        if (booking.status === 'confirmed') {
+          setBookingDetails(fullData);
+          setStatus('success');
+          return;
+        }
+
+        // 5. Se è ancora 'pending', la aggiorniamo a 'confirmed' visto che Stripe ha incassato
+        const { error: updateError } = await supabase
+          .from('bookings')
+          .update({ status: 'confirmed' })
+          .eq('id', bookingId);
+
+        if (updateError) throw updateError;
+
+        // 6. Inviamo l'email di conferma con i dati reali del DB
+        try {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: booking.guest_email?.trim(),
+              nome: fullData.guest_nome,
+              cognome: fullData.guest_cognome,
+              data: new Date(booking.booking_date).toLocaleDateString('it-IT'),
+              ombrellone: fullData.spot_number,
+              prezzo: parseFloat(booking.total_price || 0).toFixed(2),
+              utenti: booking.num_guests,
+              categoria: booking.booking_category,
+              extraSdraio: booking.extra_sdraio || 0,
+              extraLettini: booking.extra_lettini || 0,
+              prezzoExtra: 0
+            }),
+          });
+        } catch (emailErr) {
+          console.error("Errore invio email post-pagamento:", emailErr);
+        }
+
+        // 7. Aggiorniamo lo stato dell'interfaccia per mostrare il QR code
+        setBookingDetails(fullData);
+        setStatus('success');
+
+        // 8. Lanciamo il download automatico del pass generato sul Canvas
+        setTimeout(() => {
+          scaricaRicevutaAutomatica(fullData);
+        }, 800);
+
+      } catch (err) {
+        console.error("Errore nel completamento del booking:", err);
+        setStatus('error');
+      }
     };
 
-    // 4. Se la prenotazione è già confermata, mostriamo i dati senza fare doppi update
-    if (booking.status === 'confirmed') {
-      setBookingDetails(fullData);
-      setStatus('success');
-      return;
-    }
-
-    // 5. Se è ancora 'pending', la aggiorniamo a 'confirmed' visto che Stripe ha incassato
-    const { error: updateError } = await supabase
-      .from('bookings')
-      .update({ status: 'confirmed' })
-      .eq('id', bookingId);
-
-    if (updateError) throw updateError;
-
-    // 6. Inviamo l'email di conferma con i dati reali del DB
-    try {
-      await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: booking.guest_email?.trim(),
-          nome: fullData.guest_nome,
-          cognome: fullData.guest_cognome,
-          data: new Date(booking.booking_date).toLocaleDateString('it-IT'),
-          ombrellone: fullData.spot_number,
-          prezzo: parseFloat(booking.total_price || 0).toFixed(2),
-          utenti: booking.num_guests,
-          categoria: booking.booking_category,
-          extraSdraio: booking.extra_sdraio,
-          extraLettini: booking.extra_lettini,
-          prezzoExtra: 0
-        }),
-      });
-    } catch (emailErr) {
-      console.error("Errore invio email post-pagamento:", emailErr);
-    }
-
-    // 7. Aggiorniamo lo stato dell'interfaccia per mostrare il QR code
-    setBookingDetails(fullData);
-    setStatus('success');
-
-    // 8. Lanciamo il download automatico del pass generato sul Canvas
-    setTimeout(() => {
-      scaricaRicevutaAutomatica(fullData);
-    }, 800);
-
-  } catch (err) {
-    console.error("Errore nel completamento del booking:", err);
-    setStatus('error');
-  }
-};
     finalizeBooking();
   }, [sessionId]);
 
@@ -140,7 +140,7 @@ function BookingConfirmationContent() {
     ctx.font = 'bold 13px sans-serif';
     ctx.fillText(`DATA: ${new Date(meta.booking_date).toLocaleDateString('it-IT')}`, 40, 115);
     ctx.fillText(`TITOLARE: ${meta.guest_nome.toUpperCase()} ${meta.guest_cognome.toUpperCase()}`, 40, 135);
-    ctx.fillText(`CATEGORIA: ${meta.booking_category}`, 40, 155);
+    ctx.fillText(`CATEGORIA: ${meta.booking_category || 'N/D'}`, 40, 155);
     
     ctx.fillStyle = '#ea580c';
     ctx.font = 'bold 18px sans-serif';
@@ -163,16 +163,19 @@ function BookingConfirmationContent() {
     ctx.fillText('• 1 Lettino Standard (Incluso)', 50, 265);
 
     let currentY = 285;
-    if (parseInt(meta.extra_sdraio) > 0) {
+    const sdraioCount = parseInt(meta.extra_sdraio || 0);
+    const lettiniCount = parseInt(meta.extra_lettini || 0);
+
+    if (sdraioCount > 0) {
       ctx.fillStyle = '#16a34a'; 
       ctx.font = 'bold 12px sans-serif';
-      ctx.fillText(`• ${meta.extra_sdraio} Sdraio EXTRA`, 50, currentY);
+      ctx.fillText(`• ${sdraioCount} Sdraio EXTRA`, 50, currentY);
       currentY += 20;
     }
-    if (parseInt(meta.extra_lettini) > 0) {
+    if (lettiniCount > 0) {
       ctx.fillStyle = '#16a34a';
       ctx.font = 'bold 12px sans-serif';
-      ctx.fillText(`• ${meta.extra_lettini} Lettini EXTRA`, 50, currentY);
+      ctx.fillText(`• ${lettiniCount} Lettini EXTRA`, 50, currentY);
       currentY += 20;
     }
 
@@ -260,8 +263,8 @@ function BookingConfirmationContent() {
                 <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200 text-[11px]">
                   <p className="font-bold text-slate-400 uppercase text-[9px] tracking-wider mb-1">Riepilogo Consegna:</p>
                   <p>• 1 Ombrellone + 1 Lettino (Base)</p>
-                  {parseInt(bookingDetails.extra_sdraio) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_sdraio} Sdraio Extra</p>}
-                  {parseInt(bookingDetails.extra_lettini) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_lettini} Lettini Extra</p>}
+                  {parseInt(bookingDetails.extra_sdraio || 0) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_sdraio} Sdraio Extra</p>}
+                  {parseInt(bookingDetails.extra_lettini || 0) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_lettini} Lettini Extra</p>}
                 </div>
               </div>
             </div>
@@ -274,7 +277,6 @@ function BookingConfirmationContent() {
   );
 }
 
-// 2. L'export di default della pagina avvolge il contenuto dentro <Suspense>
 export default function BookingConfirmationPage() {
   return (
     <Suspense fallback={
