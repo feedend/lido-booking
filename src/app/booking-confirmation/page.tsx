@@ -1,12 +1,6 @@
 'use client';
 import { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
 
 function BookingConfirmationContent() {
   const searchParams = useSearchParams();
@@ -23,65 +17,36 @@ function BookingConfirmationContent() {
 
     const finalizeBooking = async () => {
       try {
-        // 1. Recuperiamo i metadati direttamente da Stripe tramite la tua API funzionante
+        // 1. Chiamiamo l'API di verifica lato server
         const res = await fetch(`/api/verify-session?session_id=${sessionId}`);
-        if (!res.ok) throw new Error("Verifica sessione fallita");
+        if (!res.ok) throw new Error("Verifica sessione fallita lato server");
         
-        const sessionData = await res.json();
+        const responseData = await res.json();
         
-        // Estraiamo l'oggetto metadata di Stripe
-        // NOTA: Se la tua API restituisce direttamente i metadati o l'oggetto sessione, 
-        // intercettiamo entrambi i casi per sicurezza.
-        const meta = sessionData.metadata || sessionData;
-        const bookingId = meta.booking_id;
-
-        if (!bookingId) {
-          throw new Error("ID Prenotazione non trovato nei metadati di Stripe");
+        // 2. Controlliamo la struttura del JSON inviato dalla tua API ({ success: true, data: {...} })
+        if (!responseData.success || !responseData.data) {
+          throw new Error(responseData.error || "Dati prenotazione non validi");
         }
 
-        // 2. Facciamo l'UPDATE dello stato su Supabase usando l'ID sicuro
-        const { error: updateError } = await supabase
-          .from('bookings')
-          .update({ status: 'confirmed' })
-          .eq('id', bookingId);
+        // I dati puliti e normalizzati dal server (inclusa la JOIN con spots)
+        const uiData = responseData.data;
 
-        // Se l'update fallisce per via delle RLS client, facciamo un log ma andiamo avanti 
-        // per non bloccare l'esperienza utente e la stampa del pass!
-        if (updateError) {
-          console.warn("Mancati permessi RLS in scrittura, ma procedo con la UI:", updateError);
-        }
-
-        // 3. Ricostruiamo i dati per la UI basandoci su Stripe e sulle variabili che avevi nel checkout
-        // Questo evita crash dovuti a JOIN fallite sul DB!
-        const uiData = {
-          booking_date: meta.booking_date || new Date().toISOString(),
-          guest_nome: meta.guest_nome || meta.guest_first_name || 'Ospite',
-          guest_cognome: meta.guest_cognome || meta.guest_last_name || '',
-          guest_email: meta.guest_email || '',
-          spot_number: meta.spot_number || 'Confermato',
-          booking_category: meta.booking_category || 'Standard',
-          extra_sdraio: meta.extra_sdraio || 0,
-          extra_lettini: meta.extra_lettini || 0,
-          total_price: meta.total_price || 0,
-          num_guests: meta.num_guests || 1
-        };
-
-        // 4. Invio Email Post-Pagamento
+        // 3. Invio Email Post-Pagamento
         try {
           await fetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              email: uiData.guest_email.trim(),
+              email: uiData.guest_email?.trim(),
               nome: uiData.guest_nome,
               cognome: uiData.guest_cognome,
               data: new Date(uiData.booking_date).toLocaleDateString('it-IT'),
               ombrellone: uiData.spot_number,
-              prezzo: parseFloat(uiData.total_price).toFixed(2),
-              utenti: parseInt(uiData.num_guests),
-              categoria: uiData.booking_category,
-              extraSdraio: parseInt(uiData.extra_sdraio),
-              extraLettini: parseInt(meta.extra_lettini || 0),
+              prezzo: parseFloat(uiData.total_price || 0).toFixed(2),
+              utenti: parseInt(uiData.num_guests || 1),
+              categoria: uiData.booking_category || 'Standard',
+              extraSdraio: parseInt(uiData.extra_sdraio || 0),
+              extraLettini: parseInt(uiData.extra_lettini || 0),
               prezzoExtra: 0
             }),
           });
@@ -92,13 +57,13 @@ function BookingConfirmationContent() {
         setBookingDetails(uiData);
         setStatus('success');
 
-        // Avviamo il download del pass grafico
+        // 4. Avviamo il download del pass grafico
         setTimeout(() => {
           scaricaRicevutaAutomatica(uiData);
         }, 800);
 
       } catch (err) {
-        console.error("Errore bloccante nel flusso:", err);
+        console.error("Errore bloccante nel flusso client:", err);
         setStatus('error');
       }
     };
@@ -130,9 +95,10 @@ function BookingConfirmationContent() {
     ctx.fillStyle = '#1e293b';
     ctx.textAlign = 'left';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText(`DATA: ${new Date(meta.booking_date).toLocaleDateString('it-IT')}`, 40, 115);
-    ctx.fillText(`TITOLARE: ${meta.guest_nome.toUpperCase()} ${meta.guest_cognome.toUpperCase()}`, 40, 135);
-    ctx.fillText(`CATEGORIA: ${meta.booking_category}`, 40, 155);
+    const dateFormatted = meta.booking_date ? new Date(meta.booking_date).toLocaleDateString('it-IT') : 'N/D';
+    ctx.fillText(`DATA: ${dateFormatted}`, 40, 115);
+    ctx.fillText(`TITOLARE: ${String(meta.guest_nome).toUpperCase()} ${String(meta.guest_cognome).toUpperCase()}`, 40, 135);
+    ctx.fillText(`CATEGORIA: ${meta.booking_category || 'Standard'}`, 40, 155);
     
     ctx.fillStyle = '#ea580c';
     ctx.font = 'bold 18px sans-serif';
@@ -155,16 +121,19 @@ function BookingConfirmationContent() {
     ctx.fillText('• 1 Lettino Standard (Incluso)', 50, 265);
 
     let currentY = 285;
-    if (parseInt(meta.extra_sdraio) > 0) {
+    const sdraioCount = parseInt(meta.extra_sdraio || 0);
+    const lettiniCount = parseInt(meta.extra_lettini || 0);
+
+    if (sdraioCount > 0) {
       ctx.fillStyle = '#16a34a'; 
       ctx.font = 'bold 12px sans-serif';
-      ctx.fillText(`• ${meta.extra_sdraio} Sdraio EXTRA`, 50, currentY);
+      ctx.fillText(`• ${sdraioCount} Sdraio EXTRA`, 50, currentY);
       currentY += 20;
     }
-    if (parseInt(meta.extra_lettini) > 0) {
+    if (lettiniCount > 0) {
       ctx.fillStyle = '#16a34a';
       ctx.font = 'bold 12px sans-serif';
-      ctx.fillText(`• ${meta.extra_lettini} Lettini EXTRA`, 50, currentY);
+      ctx.fillText(`• ${lettiniCount} Lettini EXTRA`, 50, currentY);
       currentY += 20;
     }
 
@@ -221,7 +190,7 @@ function BookingConfirmationContent() {
     );
   }
 
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${bookingDetails.booking_date}|POSTO:${bookingDetails.spot_number}|EMAIL:${bookingDetails.guest_email}`)}`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${bookingDetails?.booking_date}|POSTO:${bookingDetails?.spot_number}|EMAIL:${bookingDetails?.guest_email}`)}`;
 
   return (
     <div className="min-h-screen bg-amber-50/20 py-12 px-4 flex items-center justify-center">
@@ -246,14 +215,14 @@ function BookingConfirmationContent() {
               </div>
 
               <div className="pt-2.5 border-t border-slate-200 font-mono text-xs text-slate-800 space-y-1 bg-white p-3 rounded-xl border">
-                <p><strong>DATA:</strong> {new Date(bookingDetails.booking_date).toLocaleDateString('it-IT')}</p>
-                <p className="text-orange-600 font-bold text-sm"><strong>OMBRELLONE N°:</strong> {bookingDetails.spot_number}</p>
+                <p><strong>DATA:</strong> {bookingDetails?.booking_date ? new Date(bookingDetails.booking_date).toLocaleDateString('it-IT') : 'N/D'}</p>
+                <p className="text-orange-600 font-bold text-sm"><strong>OMBRELLONE N°:</strong> {bookingDetails?.spot_number}</p>
                 
                 <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200 text-[11px]">
                   <p className="font-bold text-slate-400 uppercase text-[9px] tracking-wider mb-1">Riepilogo Consegna:</p>
                   <p>• 1 Ombrellone + 1 Lettino (Base)</p>
-                  {parseInt(bookingDetails.extra_sdraio) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_sdraio} Sdraio Extra</p>}
-                  {parseInt(bookingDetails.extra_lettini) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_lettini} Lettini Extra</p>}
+                  {parseInt(bookingDetails?.extra_sdraio || 0) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_sdraio} Sdraio Extra</p>}
+                  {parseInt(bookingDetails?.extra_lettini || 0) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_lettini} Lettini Extra</p>}
                 </div>
               </div>
             </div>
