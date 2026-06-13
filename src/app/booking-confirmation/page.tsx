@@ -23,7 +23,7 @@ function BookingConfirmationContent() {
 
     const finalizeBooking = async () => {
       try {
-        // 1. Chiediamo a Stripe i dati della sessione per recuperare il booking_id
+        // 1. Chiediamo alla tua rotta API i dettagli della sessione di Stripe
         const res = await fetch(`/api/verify-session?session_id=${sessionId}`);
         if (!res.ok) throw new Error("Verifica sessione fallita");
         
@@ -34,7 +34,7 @@ function BookingConfirmationContent() {
           throw new Error("ID Prenotazione non trovato nei metadati di Stripe");
         }
 
-        // 2. Recuperiamo la prenotazione esistente unendo i dati della tabella 'spots'
+        // 2. Recuperiamo la prenotazione esistente unendo in JOIN il codice dell'ombrellone
         const { data: booking, error: fetchError } = await supabase
           .from('bookings')
           .select(`
@@ -50,22 +50,22 @@ function BookingConfirmationContent() {
           throw new Error("Impossibile trovare la prenotazione nel database");
         }
 
-        // 3. Mappiamo i dati per renderli compatibili al 100% con Canvas e JSX
+        // 3. Normalizziamo i dati per mapparli sul Canvas e sul JSX senza errori di undefined
         const fullData = {
           ...booking,
           guest_nome: booking.guest_nome || booking.guest_first_name || 'Ospite',
           guest_cognome: booking.guest_cognome || booking.guest_last_name || '',
-          spot_number: booking.spots?.internal_code || booking.spot_id || 'N/D'
+          spot_number: booking.spots?.internal_code || 'N/D'
         };
 
-        // 4. Se la prenotazione è già confermata, mostriamo i dati senza fare doppi update
+        // 4. Se lo stato è già confirmed (es. refresh della pagina), saltiamo l'update e mostriamo il pass
         if (booking.status === 'confirmed') {
           setBookingDetails(fullData);
           setStatus('success');
           return;
         }
 
-        // 5. Se è ancora 'pending', la aggiorniamo a 'confirmed' visto che Stripe ha incassato
+        // 5. Aggiorniamo lo stato sul DB da 'pending' a 'confirmed' visto che Stripe ha incassato
         const { error: updateError } = await supabase
           .from('bookings')
           .update({ status: 'confirmed' })
@@ -73,7 +73,7 @@ function BookingConfirmationContent() {
 
         if (updateError) throw updateError;
 
-        // 6. Inviamo l'email di conferma con i dati reali del DB
+        // 6. Inviamo l'email di conferma all'utente
         try {
           await fetch('/api/send-email', {
             method: 'POST',
@@ -85,8 +85,8 @@ function BookingConfirmationContent() {
               data: new Date(booking.booking_date).toLocaleDateString('it-IT'),
               ombrellone: fullData.spot_number,
               prezzo: parseFloat(booking.total_price || 0).toFixed(2),
-              utenti: booking.num_guests,
-              categoria: booking.booking_category,
+              utenti: booking.num_guests || 1,
+              categoria: booking.booking_category || 'Standard',
               extraSdraio: booking.extra_sdraio || 0,
               extraLettini: booking.extra_lettini || 0,
               prezzoExtra: 0
@@ -96,11 +96,11 @@ function BookingConfirmationContent() {
           console.error("Errore invio email post-pagamento:", emailErr);
         }
 
-        // 7. Aggiorniamo lo stato dell'interfaccia per mostrare il QR code
+        // 7. Sblocchiamo l'interfaccia grafica
         setBookingDetails(fullData);
         setStatus('success');
 
-        // 8. Lanciamo il download automatico del pass generato sul Canvas
+        // 8. Lanciamo il download automatico del file PNG
         setTimeout(() => {
           scaricaRicevutaAutomatica(fullData);
         }, 800);
@@ -122,12 +122,15 @@ function BookingConfirmationContent() {
     canvas.width = 400;
     canvas.height = 620;
 
+    // Sfondo Bianco
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Header Arancione
     ctx.fillStyle = '#ea580c';
     ctx.fillRect(0, 0, canvas.width, 85);
 
+    // Testi Header
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 15px sans-serif';
     ctx.textAlign = 'center';
@@ -135,17 +138,21 @@ function BookingConfirmationContent() {
     ctx.font = '11px sans-serif';
     ctx.fillText('PASS DI ACCESSO GIORNALIERO', 200, 58);
 
+    // Dettagli Titolare
     ctx.fillStyle = '#1e293b';
     ctx.textAlign = 'left';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText(`DATA: ${new Date(meta.booking_date).toLocaleDateString('it-IT')}`, 40, 115);
-    ctx.fillText(`TITOLARE: ${meta.guest_nome.toUpperCase()} ${meta.guest_cognome.toUpperCase()}`, 40, 135);
+    const dataString = meta.booking_date ? new Date(meta.booking_date).toLocaleDateString('it-IT') : '';
+    ctx.fillText(`DATA: ${dataString}`, 40, 115);
+    ctx.fillText(`TITOLARE: ${String(meta.guest_nome).toUpperCase()} ${String(meta.guest_cognome).toUpperCase()}`, 40, 135);
     ctx.fillText(`CATEGORIA: ${meta.booking_category || 'N/D'}`, 40, 155);
     
+    // Numero Ombrellone
     ctx.fillStyle = '#ea580c';
     ctx.font = 'bold 18px sans-serif';
     ctx.fillText(`OMBRELLONE N°: ${meta.spot_number}`, 40, 190);
 
+    // Separatore
     ctx.strokeStyle = '#cbd5e1';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -153,6 +160,7 @@ function BookingConfirmationContent() {
     ctx.lineTo(360, 205);
     ctx.stroke();
 
+    // Dotazione
     ctx.fillStyle = '#1e293b';
     ctx.font = 'bold 12px sans-serif';
     ctx.fillText('DOTAZIONE DA CONSEGNARE:', 40, 225);
@@ -179,6 +187,7 @@ function BookingConfirmationContent() {
       currentY += 20;
     }
 
+    // Box Avviso Militare
     ctx.strokeStyle = '#f97316';
     ctx.fillStyle = '#fff7ed';
     ctx.lineWidth = 1;
@@ -197,6 +206,7 @@ function BookingConfirmationContent() {
     ctx.fillText('CARTA ESERCITO verranno controllati all\'ingresso del Lido dal', 48, currentY + 41);
     ctx.fillText('personale militare preposto.', 48, currentY + 52);
 
+    // Generazione dinamica QR Code
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${meta.booking_date}|POSTO:${meta.spot_number}|EMAIL:${meta.guest_email}`)}`;
 
     const qrImg = new Image();
@@ -232,7 +242,7 @@ function BookingConfirmationContent() {
     );
   }
 
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${bookingDetails.booking_date}|POSTO:${bookingDetails.spot_number}|EMAIL:${bookingDetails.guest_email}`)}`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`LIDO_SANTA_SEVERA|DATA:${bookingDetails?.booking_date}|POSTO:${bookingDetails?.spot_number}|EMAIL:${bookingDetails?.guest_email}`)}`;
 
   return (
     <div className="min-h-screen bg-amber-50/20 py-12 px-4 flex items-center justify-center">
@@ -257,14 +267,14 @@ function BookingConfirmationContent() {
               </div>
 
               <div className="pt-2.5 border-t border-slate-200 font-mono text-xs text-slate-800 space-y-1 bg-white p-3 rounded-xl border">
-                <p><strong>DATA:</strong> {new Date(bookingDetails.booking_date).toLocaleDateString('it-IT')}</p>
-                <p className="text-orange-600 font-bold text-sm"><strong>OMBRELLONE N°:</strong> {bookingDetails.spot_number}</p>
+                <p><strong>DATA:</strong> {bookingDetails?.booking_date ? new Date(bookingDetails.booking_date).toLocaleDateString('it-IT') : 'N/D'}</p>
+                <p className="text-orange-600 font-bold text-sm"><strong>OMBRELLONE N°:</strong> {bookingDetails?.spot_number}</p>
                 
                 <div className="mt-2.5 pt-2 border-t border-dashed border-slate-200 text-[11px]">
                   <p className="font-bold text-slate-400 uppercase text-[9px] tracking-wider mb-1">Riepilogo Consegna:</p>
                   <p>• 1 Ombrellone + 1 Lettino (Base)</p>
-                  {parseInt(bookingDetails.extra_sdraio || 0) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_sdraio} Sdraio Extra</p>}
-                  {parseInt(bookingDetails.extra_lettini || 0) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_lettini} Lettini Extra</p>}
+                  {parseInt(bookingDetails?.extra_sdraio || 0) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_sdraio} Sdraio Extra</p>}
+                  {parseInt(bookingDetails?.extra_lettini || 0) > 0 && <p className="text-emerald-600 font-semibold">• {bookingDetails.extra_lettini} Lettini Extra</p>}
                 </div>
               </div>
             </div>
