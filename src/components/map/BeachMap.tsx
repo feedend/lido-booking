@@ -85,7 +85,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     if (catLower.includes('parenti')) {
       supplementoPersona = 1.5;
     } else if (catLower === 'esercito') {
-      supplementoPersona = 0.1;
+      supplementoPersona = 0.30;
     } else if (catLower.includes('altra forza armata')) {
       supplementoPersona = 3.5;
     } else if (catLower.includes('quiescenza')) {
