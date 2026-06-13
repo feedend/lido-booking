@@ -76,8 +76,8 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   }, [selectedDate]);
 
   const calcolaPrezzoTotale = () => {
-    const quotaBaseOmbrellone = 2.0;
-    const quotaBaseSdraio = 1.5; 
+    const quotaBaseOmbrellone = 0.1;
+    const quotaBaseSdraio = 0.1; 
     
     let supplementoPersona = 0.0;
     const catLower = userData.categoria ? userData.categoria.toLowerCase().trim() : '';
