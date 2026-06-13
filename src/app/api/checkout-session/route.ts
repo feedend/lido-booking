@@ -22,7 +22,33 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { selectedDate, prezzoFinale, spotId, spotNumber, userData } = body;
 
-    // 1. Creiamo la prenotazione in stato 'pending' nel database
+    // --- PULIZIA SICURA DEI PENDING SCADUTI (COMPATIBILE AL 100% CON IL DEPLOY) ---
+    const quindiciMinutiFa = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+    // 1. Recuperiamo i record pending per quella data che corrispondono all'ombrellone O alla mail
+    const { data: pendingPrecedenti } = await supabaseAdmin
+      .from('bookings')
+      .select('id, created_at')
+      .eq('booking_date', selectedDate)
+      .eq('status', 'pending')
+      .or(`spot_id.eq.${spotId},guest_email.eq.${userData.email}`);
+
+    // 2. Se ci sono, filtriamo quelli creati PRIMA dei 15 minuti fa ed eliminiamoli per ID
+    if (pendingPrecedenti && pendingPrecedenti.length > 0) {
+      const idsDaEliminare = pendingPrecedenti
+        .filter(b => b.created_at < quindiciMinutiFa)
+        .map(b => b.id);
+
+      if (idsDaEliminare.length > 0) {
+        await supabaseAdmin
+          .from('bookings')
+          .delete()
+          .in('id', idsDaEliminare);
+      }
+    }
+    // -----------------------------------------------------------------------------
+
+    // Creiamo la prenotazione in stato 'pending' nel database
     const { data: newBooking, error: dbError } = await supabaseAdmin
       .from('bookings')
       .insert({
@@ -44,14 +70,14 @@ export async function POST(request: Request) {
 
     if (dbError) {
       console.error("Errore DB inserimento prenotazione:", dbError);
-      return NextResponse.json({ error: "Postazione non disponibile o già riservata." }, { status: 400 });
+      return NextResponse.json({ error: "Postazione non disponibile o già riservata per questa data." }, { status: 400 });
     }
 
-    // 2. Prepariamo la sessione di Stripe convertendo il prezzo in centesimi
+    // Prepariamo la sessione di Stripe convertendo il prezzo in centesimi
     const amountInCents = Math.round(prezzoFinale * 100);
 
     const session = await stripe.checkout.sessions.create({
-     payment_method_types: ['card'],
+      payment_method_types: ['card'],
       customer_email: userData.email,
       line_items: [
         {
@@ -67,10 +93,8 @@ export async function POST(request: Request) {
         },
       ],
       mode: 'payment',
-      // CORREZIONE 1: URL modificato in /booking-confirmation per combaciare al millimetro con la tua cartella
       success_url: `${request.headers.get('origin')}/booking-confirmation?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${request.headers.get('origin')}/piantina?error=cancelled`,
-      // CORREZIONE 2: Passiamo TUTTI i dati nei metadati così la pagina di conferma li legge istantaneamente
       metadata: {
         booking_id: newBooking.id,
         booking_date: selectedDate,
@@ -86,7 +110,7 @@ export async function POST(request: Request) {
       },
     });
 
-    // 3. Aggiorniamo la prenotazione inserendo lo stripe_session_id appena generato
+    // Aggiorniamo la prenotazione inserendo lo stripe_session_id appena generato
     await supabaseAdmin
       .from('bookings')
       .update({ stripe_session_id: session.id })
