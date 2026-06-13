@@ -1,12 +1,6 @@
 'use client';
 import { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
 
 function BookingConfirmationContent() {
   const searchParams = useSearchParams();
@@ -23,72 +17,34 @@ function BookingConfirmationContent() {
 
     const finalizeBooking = async () => {
       try {
-        // 1. Chiamiamo la rotta di verifica per prendere i metadati da Stripe
+        // Chiediamo all'API di fare la verifica, l'update su DB e la JOIN in modo sicuro lato server
         const res = await fetch(`/api/verify-session?session_id=${sessionId}`);
-        if (!res.ok) throw new Error("Verifica sessione fallita");
+        if (!res.ok) throw new Error("Verifica sessione o aggiornamento DB falliti");
         
-        const sessionData = await res.json();
-        const bookingId = sessionData.metadata?.booking_id;
-
-        if (!bookingId) {
-          throw new Error("ID Prenotazione non trovato nei metadati");
+        const responseData = await res.json();
+        
+        if (!responseData.success || !responseData.data) {
+          throw new Error(responseData.error || "Dati prenotazione non validi");
         }
 
-        // 2. Recuperiamo la prenotazione da Supabase includendo i dati dello spot in JOIN
-        const { data: booking, error: fetchError } = await supabase
-          .from('bookings')
-          .select(`
-            *,
-            spots (
-              internal_code
-            )
-          `)
-          .eq('id', bookingId)
-          .maybeSingle();
+        const fullData = responseData.data;
 
-        if (fetchError || !booking) {
-          throw new Error("Prenotazione non trovata nel database");
-        }
-
-        // 3. Adattiamo i campi del DB per renderli compatibili con il Canvas e la UI
-        const fullData = {
-          ...booking,
-          guest_nome: booking.guest_first_name || 'Ospite',
-          guest_cognome: booking.guest_last_name || '',
-          spot_number: booking.spots?.internal_code || 'N/D'
-        };
-
-        // 4. Se è già confermato (es. l'utente fa refresh), mostra il pass direttamente
-        if (booking.status === 'confirmed') {
-          setBookingDetails(fullData);
-          setStatus('success');
-          return;
-        }
-
-        // 5. Aggiorniamo lo stato sul DB da 'pending' a 'confirmed'
-        const { error: updateError } = await supabase
-          .from('bookings')
-          .update({ status: 'confirmed' })
-          .eq('id', bookingId);
-
-        if (updateError) throw updateError;
-
-        // 6. Inviamo l'email di conferma tramite la tua API interna
+        // Inviamo l'email di conferma lato client (o puoi spostare anche questa nell'API se preferisci)
         try {
           await fetch('/api/send-email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              email: booking.guest_email?.trim(),
+              email: fullData.guest_email?.trim(),
               nome: fullData.guest_nome,
               cognome: fullData.guest_cognome,
-              data: new Date(booking.booking_date).toLocaleDateString('it-IT'),
+              data: new Date(fullData.booking_date).toLocaleDateString('it-IT'),
               ombrellone: fullData.spot_number,
-              prezzo: parseFloat(booking.total_price || 0).toFixed(2),
-              utenti: booking.num_guests || 1,
-              categoria: booking.booking_category || 'Standard',
-              extraSdraio: booking.extra_sdraio || 0,
-              extraLettini: booking.extra_lettini || 0,
+              prezzo: parseFloat(fullData.total_price || 0).toFixed(2),
+              utenti: fullData.num_guests || 1,
+              categoria: fullData.booking_category || 'Standard',
+              extraSdraio: fullData.extra_sdraio || 0,
+              extraLettini: fullData.extra_lettini || 0,
               prezzoExtra: 0
             }),
           });
@@ -96,7 +52,6 @@ function BookingConfirmationContent() {
           console.error("Errore nell'invio dell'email:", emailErr);
         }
 
-        // Mostriamo il pass a schermo e avviamo il download
         setBookingDetails(fullData);
         setStatus('success');
 
