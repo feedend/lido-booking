@@ -52,11 +52,15 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
           setDbSpots(spotsData);
         }
 
+        // Calcoliamo la soglia temporale esatta di 15 minutes fa in formato ISO
+        const quindiciMinutiFa = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+        // Modifica sicura: Carica solo confermati o pending creati negli ultimi 15 minuti
         const { data: bookingsData } = await supabase
           .from('bookings')
           .select('spot_id, status, booking_category') 
           .eq('booking_date', selectedDate)
-          .not('status', 'eq', 'cancelled');
+          .or(`status.eq.confirmed,and(status.eq.pending,created_at.gt.${quindiciMinutiFa})`);
 
         if (bookingsData && spotsData) {
           const occupatiIds = bookingsData
@@ -101,7 +105,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   };
   const prezzoFinale = calcolaPrezzoTotale();
 
-  // SOSTITUITA LA LOGICA FITTIZIA CON INTEGRAZIONE STRIPE CHECKOUT
   const handlePaymentAndBooking = async () => {
     if (selectedSpotNumber === null) return;
     
@@ -165,7 +168,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         throw new Error(session.error || "Impossibile avviare il circuito di pagamento.");
       }
 
-      // Reindirizzamento dell'utente all'ambiente di pagamento Stripe
       window.location.href = session.url;
 
     } catch (err: any) {
