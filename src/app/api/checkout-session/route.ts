@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     const amountInCents = Math.round(prezzoFinale * 100);
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+     automatic_payment_methods: { enabled: true },
       customer_email: userData.email,
       line_items: [
         {
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
             currency: 'eur',
             product_data: {
               name: `Prenotazione Ombrellone N° ${spotNumber}`,
-              description: `Data: ${new Date(selectedDate).toLocaleDateString('it-IT')} - Webpilot`,
+              description: `Data: ${new Date(selectedDate).toLocaleDateString('it-IT')} - C3C`,
             },
             unit_amount: amountInCents,
           },
