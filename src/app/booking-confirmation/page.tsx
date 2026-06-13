@@ -23,83 +23,94 @@ function BookingConfirmationContent() {
     hasRun.current = true;
 
     const finalizeBooking = async () => {
-      try {
-        const res = await fetch(`/api/verify-session?session_id=${sessionId}`);
-        if (!res.ok) throw new Error("Verifica sessione fallita");
-        
-        const sessionData = await res.json();
-        const meta = sessionData.metadata;
+  try {
+    // 1. Chiediamo a Stripe i dati della sessione per recuperare il booking_id
+    const res = await fetch(`/api/verify-session?session_id=${sessionId}`);
+    if (!res.ok) throw new Error("Verifica sessione fallita");
+    
+    const sessionData = await res.json();
+    const bookingId = sessionData.metadata?.booking_id;
 
-        const { data: existing } = await supabase
-          .from('bookings')
-          .select('id')
-          .eq('spot_id', meta.spot_id)
-          .eq('booking_date', meta.booking_date)
-          .eq('guest_email', meta.guest_email)
-          .not('status', 'eq', 'cancelled')
-          .maybeSingle();
+    if (!bookingId) {
+      throw new Error("ID Prenotazione non trovato nei metadati di Stripe");
+    }
 
-        if (existing) {
-          setBookingDetails(meta);
-          setStatus('success');
-          return;
-        }
+    // 2. Recuperiamo la prenotazione esistente unendo i dati della tabella 'spots'
+    const { data: booking, error: fetchError } = await supabase
+      .from('bookings')
+      .select(`
+        *,
+        spots (
+          internal_code
+        )
+      `)
+      .eq('id', bookingId)
+      .maybeSingle();
 
-       const { error: insertError } = await supabase
-  .from('bookings')
-  .insert([{
-    spot_id: meta.spot_id,
-    booking_date: meta.booking_date,
-    guest_first_name: meta.guest_nome, // Mappato su guest_first_name
-    guest_last_name: meta.guest_cognome, // Mappato su guest_last_name
-    guest_email: meta.guest_email,
-    guest_phone: meta.guest_phone || null,
-    num_guests: parseInt(meta.num_guests),
-    booking_category: meta.booking_category,
-    // Ricordati che extra_sdraio e extra_lettini vanno comunque aggiunti al DB!
-    extra_sdraio: parseInt(meta.extra_sdraio), 
-    extra_lettini: parseInt(meta.extra_lettini),
-    total_price: parseFloat(meta.total_price),
-    status: 'confirmed'
-  }]);
+    if (fetchError || !booking) {
+      throw new Error("Impossibile trovare la prenotazione nel database");
+    }
 
-        if (insertError) throw insertError;
-
-        try {
-          await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: meta.guest_email.trim(),
-              nome: meta.guest_nome,
-              cognome: meta.guest_cognome,
-              data: new Date(meta.booking_date).toLocaleDateString('it-IT'),
-              ombrellone: meta.spot_number,
-              prezzo: parseFloat(meta.total_price).toFixed(2),
-              utenti: parseInt(meta.num_guests),
-              categoria: meta.booking_category,
-              extraSdraio: parseInt(meta.extra_sdraio),
-              extraLettini: parseInt(meta.extra_lettini),
-              prezzoExtra: 0
-            }),
-          });
-        } catch (emailErr) {
-          console.error("Errore invio email post-pagamento:", emailErr);
-        }
-
-        setBookingDetails(meta);
-        setStatus('success');
-
-        setTimeout(() => {
-          scaricaRicevutaAutomatica(meta);
-        }, 800);
-
-      } catch (err) {
-        console.error(err);
-        setStatus('error');
-      }
+    // 3. Mappiamo i dati per renderli compatibili al 100% con il tuo Canvas e JSX
+    const fullData = {
+      ...booking,
+      guest_nome: booking.guest_nome || booking.guest_first_name || 'Ospite',
+      guest_cognome: booking.guest_cognome || booking.guest_last_name || '',
+      spot_number: booking.spots?.internal_code || 'N/D'
     };
 
+    // 4. Se la prenotazione è già confermata, mostriamo i dati senza fare doppi update
+    if (booking.status === 'confirmed') {
+      setBookingDetails(fullData);
+      setStatus('success');
+      return;
+    }
+
+    // 5. Se è ancora 'pending', la aggiorniamo a 'confirmed' visto che Stripe ha incassato
+    const { error: updateError } = await supabase
+      .from('bookings')
+      .update({ status: 'confirmed' })
+      .eq('id', bookingId);
+
+    if (updateError) throw updateError;
+
+    // 6. Inviamo l'email di conferma con i dati reali del DB
+    try {
+      await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: booking.guest_email?.trim(),
+          nome: fullData.guest_nome,
+          cognome: fullData.guest_cognome,
+          data: new Date(booking.booking_date).toLocaleDateString('it-IT'),
+          ombrellone: fullData.spot_number,
+          prezzo: parseFloat(booking.total_price || 0).toFixed(2),
+          utenti: booking.num_guests,
+          categoria: booking.booking_category,
+          extraSdraio: booking.extra_sdraio,
+          extraLettini: booking.extra_lettini,
+          prezzoExtra: 0
+        }),
+      });
+    } catch (emailErr) {
+      console.error("Errore invio email post-pagamento:", emailErr);
+    }
+
+    // 7. Aggiorniamo lo stato dell'interfaccia per mostrare il QR code
+    setBookingDetails(fullData);
+    setStatus('success');
+
+    // 8. Lanciamo il download automatico del pass generato sul Canvas
+    setTimeout(() => {
+      scaricaRicevutaAutomatica(fullData);
+    }, 800);
+
+  } catch (err) {
+    console.error("Errore nel completamento del booking:", err);
+    setStatus('error');
+  }
+};
     finalizeBooking();
   }, [sessionId]);
 
