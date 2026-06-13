@@ -88,7 +88,7 @@ export default function AdminDashboard() {
 
       const { data: bookingsData, error: bookErr } = await supabase
         .from('bookings')
-        .select('id, spot_id, guest_first_name, guest_last_name, guest_email, guest_phone, booking_category, total_price, notes')
+        .select('id, spot_id, guest_first_name, guest_last_name, guest_email, guest_phone, booking_category, total_price, notes, status')
         .eq('booking_date', filterDate)
         .not('status', 'eq', 'cancelled');
 
@@ -235,9 +235,12 @@ export default function AdminDashboard() {
   };
 
   // --- LOGICA DI CONTEGGIO FINANZIARIO DIVISO ---
-  const totaleGenerale = bookings.reduce((sum, b) => sum + (b.total_price || 0), 0);
+  // Filtriamo al volo per i conteggi prendendo solo i confermati
+  const prenotazioniConfermate = bookings.filter(b => (b as any).status === 'confirmed');
+
+  const totaleGenerale = prenotazioniConfermate.reduce((sum, b) => sum + (b.total_price || 0), 0);
   
-  const giornalieriInLoco = bookings.filter(b => b.booking_category === 'Giornaliero in loco');
+  const giornalieriInLoco = prenotazioniConfermate.filter(b => b.booking_category === 'Giornaliero in loco');
   
   const totaleGiornalieriInLoco = giornalieriInLoco.reduce((sum, b) => sum + (b.total_price || 0), 0);
   
