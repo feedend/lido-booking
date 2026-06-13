@@ -80,8 +80,8 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   }, [selectedDate]);
 
   const calcolaPrezzoTotale = () => {
-    const quotaBaseOmbrellone = 0.1;
-    const quotaBaseSdraio = 0.1; 
+    const quotaBaseOmbrellone = 2.0;
+    const quotaBaseSdraio = 1.5; 
     
     let supplementoPersona = 0.0;
     const catLower = userData.categoria ? userData.categoria.toLowerCase().trim() : '';
@@ -95,7 +95,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     } else if (catLower.includes('quiescenza')) {
       supplementoPersona = 3.5;
     } else if (catLower === 'giornaliero') {
-      supplementoPersona = 0.5;
+      supplementoPersona = 3.5;
     }
     
     const costoStrutturaBase = quotaBaseOmbrellone + quotaBaseSdraio;
