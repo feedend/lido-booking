@@ -22,19 +22,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { selectedDate, prezzoFinale, spotId, spotNumber, userData } = body;
 
-    // --- CRITICO: PULIZIA DEI PENDING SCADUTI PRIMA DELL'INSERIMENTO ---
-    const quindiciMinutiFa = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-
-    // Eliminiamo eventuali tentativi 'pending' vecchi per lo stesso ombrellone O per la stessa email nella stessa data
-    await supabaseAdmin
-      .from('bookings')
-      .delete()
-      .eq('booking_date', selectedDate)
-      .eq('status', 'pending')
-      .lt('created_at', quindiciMinutiFa)
-      .or(`spot_id.eq.${spotId},guest_email.eq.${userData.email}`);
-    // -----------------------------------------------------------------
-
     // 1. Creiamo la prenotazione in stato 'pending' nel database
     const { data: newBooking, error: dbError } = await supabaseAdmin
       .from('bookings')
@@ -57,14 +44,14 @@ export async function POST(request: Request) {
 
     if (dbError) {
       console.error("Errore DB inserimento prenotazione:", dbError);
-      return NextResponse.json({ error: "Postazione non disponibile o già riservata per questa data." }, { status: 400 });
+      return NextResponse.json({ error: "Postazione non disponibile o già riservata." }, { status: 400 });
     }
 
     // 2. Prepariamo la sessione di Stripe convertendo il prezzo in centesimi
     const amountInCents = Math.round(prezzoFinale * 100);
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+     payment_method_types: ['card'],
       customer_email: userData.email,
       line_items: [
         {
@@ -80,8 +67,10 @@ export async function POST(request: Request) {
         },
       ],
       mode: 'payment',
+      // CORREZIONE 1: URL modificato in /booking-confirmation per combaciare al millimetro con la tua cartella
       success_url: `${request.headers.get('origin')}/booking-confirmation?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${request.headers.get('origin')}/piantina?error=cancelled`,
+      // CORREZIONE 2: Passiamo TUTTI i dati nei metadati così la pagina di conferma li legge istantaneamente
       metadata: {
         booking_id: newBooking.id,
         booking_date: selectedDate,
