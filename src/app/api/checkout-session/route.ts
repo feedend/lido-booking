@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     const amountInCents = Math.round(prezzoFinale * 100);
 
     const session = await stripe.checkout.sessions.create({
-     automatic_payment_methods: { enabled: true },
+     payment_method_types: ['card'],
       customer_email: userData.email,
       line_items: [
         {
