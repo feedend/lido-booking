@@ -7,10 +7,9 @@ type CalendarProps = {
 };
 
 export default function CalendarStep({ categoria, onDateSelect }: CalendarProps) {
-  // Stato locale opzionale per tenere traccia della data scelta e renderizzarla visivamente
   const [currentDate, setCurrentDate] = useState('');
 
-  // Calcolo della data odierna locale (senza sballare con ISOString e fusi orari)
+  // Calcolo della data odierna locale
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -41,15 +40,14 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
   const maxDateStr = `${maxYear}-${maxMonth}-${maxDay}`;
 
   return (
-    <div className="max-w-md mx-auto bg-white rounded-3xl shadow-2xl border border-orange-100/70 overflow-hidden text-slate-800 transition-all duration-300 hover:shadow-orange-500/5">
+    <div className="max-w-md mx-auto bg-white rounded-3xl shadow-2xl border border-orange-100/70 overflow-hidden text-slate-800">
       
-      {/* Intestazione Coordinata con Pattern Onde CSS */}
+      {/* Intestazione con Pattern Onde CSS */}
       <div className="relative h-20 bg-gradient-to-r from-orange-500 to-amber-500 flex flex-col justify-center items-center text-white overflow-hidden select-none">
         <h2 className="text-base font-black uppercase tracking-wider relative z-10 drop-shadow-sm">
           Scelta della Data
         </h2>
         
-        {/* SVG Onde Mare in Puro Stile Lido */}
         <div className="absolute left-0 bottom-0 w-[200%] h-6 pointer-events-none origin-bottom opacity-40">
           <style dangerouslySetInnerHTML={{__html: `
             @keyframes calendarWave {
@@ -78,20 +76,21 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
           </span>
         </div>
         
-        {/* Testo di Contesto */}
-        <p className="text-sm text-slate-500 mb-6 text-center leading-relaxed max-w-[280px]">
+        {/* Testo di Contesto - Associato esplicitamente all'input tramite htmlFor */}
+        <label htmlFor="lido-date-picker" className="text-sm text-slate-500 mb-6 text-center leading-relaxed max-w-[280px] cursor-pointer block">
           In base alla tariffa <span className="font-bold text-orange-600 block sm:inline">"{categoria}"</span>, puoi riservare fino al <span className="font-semibold text-slate-900 border-b-2 border-amber-400 pb-0.5">{maxDate.toLocaleDateString('it-IT')}</span>
-        </p>
+        </label>
 
-        {/* Input Data Corretto per iOS e ricolorazione nativa */}
-        <div className="w-full relative">
+        {/* Input Data con ID rigido e Reset dei font Safari */}
+        <div className="w-full relative px-1">
           <input 
+            id="lido-date-picker"
             type="date"
             min={minDateStr}
             max={maxDateStr}
             value={currentDate}
-            /* Rimosso appearance-none per non mandare in crash Safari su iOS */
-            className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-lg font-bold text-slate-800 cursor-pointer focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 block"
+            className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-base font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-150 block dynamic-date-input"
+            style={{ WebkitAppearance: 'listbox' }} // Forza Safari a usare la struttura stabile a lista anziché popup volanti
             onChange={(e) => {
               const val = e.target.value;
               setCurrentDate(val);
@@ -100,12 +99,10 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
           />
         </div>
 
-        {/* Box Informativo di Rinforzo UX */}
         <div className="w-full mt-6 p-4 bg-amber-50/20 border border-orange-100/40 rounded-2xl text-[11px] text-center text-slate-500">
           I posti disponibili variano in tempo reale a seconda delle richieste complessive ricevute dallo stabilimento.
         </div>
 
-        {/* Footer info di sistema */}
         <div className="mt-6 text-[9px] text-slate-400 font-bold uppercase tracking-widest border-t border-slate-100 pt-4 w-full text-center select-none">
           Stabilimento Balneare Santa Severa
         </div>
