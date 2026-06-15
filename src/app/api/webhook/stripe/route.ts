@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
+// ▀▄▀▄▀▄ MODIFICA DI SICUREZZA PER IL DEPLOY SU VERCEL ▄▀▄▀▄▀
+// Forza la route a essere dinamica al 100% (evita il blocco in fase di build)
+export const dynamic = 'force-dynamic';
+// Specifica l'ambiente Node.js standard per gestire payload e firme crittografiche
+export const runtime = 'nodejs'; 
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2025-01-27' as any,
 });
@@ -36,10 +42,10 @@ export async function POST(request: Request) {
     if (bookingId) {
       console.log(`PAGAMENTO CONFERMATO per la prenotazione: ${bookingId}`);
       
-      // Aggiorniamo lo stato su Supabase a 'confirmed' (o come si chiama nel tuo enum `booking_status`)
+      // Aggiorniamo lo stato su Supabase a 'confirmed'
       const { error } = await supabaseAdmin
         .from('bookings')
-        .update({ status: 'confirmed' }) // Sostituisci 'confirmed' con il valore esatto del tuo DB (es. 'approved')
+        .update({ status: 'confirmed' }) 
         .eq('id', bookingId);
 
       if (error) {
