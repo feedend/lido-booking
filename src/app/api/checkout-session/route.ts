@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
+// 1. Forza il comportamento totalmente dinamico lato server
 export const dynamic = 'force-dynamic';
+// 2. Forza esplicitamente il runtime a Node.js (evita l'ottimizzazione statica delle pagine)
+export const runtime = 'nodejs'; 
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
