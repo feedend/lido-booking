@@ -1,5 +1,5 @@
 'use client';
-import React from 'react';
+import React, { useState } from 'react';
 
 type CalendarProps = {
   categoria: string;
@@ -7,6 +7,9 @@ type CalendarProps = {
 };
 
 export default function CalendarStep({ categoria, onDateSelect }: CalendarProps) {
+  // Stato locale opzionale per tenere traccia della data scelta e renderizzarla visivamente
+  const [currentDate, setCurrentDate] = useState('');
+
   // Calcolo della data odierna locale (senza sballare con ISOString e fusi orari)
   const today = new Date();
   const yyyy = today.getFullYear();
@@ -80,14 +83,20 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
           In base alla tariffa <span className="font-bold text-orange-600 block sm:inline">"{categoria}"</span>, puoi riservare fino al <span className="font-semibold text-slate-900 border-b-2 border-amber-400 pb-0.5">{maxDate.toLocaleDateString('it-IT')}</span>
         </p>
 
-        {/* Input Data Ricolorato e Fluido */}
-        <div className="w-full relative group">
+        {/* Input Data Corretto per iOS e ricolorazione nativa */}
+        <div className="w-full relative">
           <input 
             type="date"
             min={minDateStr}
             max={maxDateStr}
-            className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-lg font-bold text-slate-800 cursor-pointer focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 appearance-none"
-            onChange={(e) => onDateSelect(e.target.value)}
+            value={currentDate}
+            /* Rimosso appearance-none per non mandare in crash Safari su iOS */
+            className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-lg font-bold text-slate-800 cursor-pointer focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 block"
+            onChange={(e) => {
+              const val = e.target.value;
+              setCurrentDate(val);
+              onDateSelect(val);
+            }}
           />
         </div>
 
