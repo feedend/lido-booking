@@ -39,6 +39,13 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
   const maxDay = String(maxDate.getDate()).padStart(2, '0');
   const maxDateStr = `${maxYear}-${maxMonth}-${maxDay}`;
 
+  // Gestione della conferma esplicita della data per evitare i glitch di re-render di iOS
+  const handleConfirmDate = () => {
+    if (currentDate) {
+      onDateSelect(currentDate);
+    }
+  };
+
   return (
     <div className="max-w-md mx-auto bg-white rounded-3xl shadow-2xl border border-orange-100/70 overflow-hidden text-slate-800">
       
@@ -81,7 +88,7 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
           In base alla tariffa <span className="font-bold text-orange-600 block sm:inline">"{categoria}"</span>, puoi riservare fino al <span className="font-semibold text-slate-900 border-b-2 border-amber-400 pb-0.5">{maxDate.toLocaleDateString('it-IT')}</span>
         </label>
 
-        {/* Input Data con ID rigido e Reset dei font Safari */}
+        {/* Input Data con ID rigido e isolamento dello stato */}
         <div className="w-full relative px-1">
           <input 
             id="lido-date-picker"
@@ -90,13 +97,23 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
             max={maxDateStr}
             value={currentDate}
             className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-base font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-150 block dynamic-date-input"
-            style={{ WebkitAppearance: 'listbox' }} // Forza Safari a usare la struttura stabile a lista anziché popup volanti
             onChange={(e) => {
-              const val = e.target.value;
-              setCurrentDate(val);
-              onDateSelect(val);
+              // Aggiorna SOLO lo stato locale. Non invoca onDateSelect qui in tempo reale,
+              // impedendo a Safari di distruggere il componente durante l'animazione di scorrimento.
+              setCurrentDate(e.target.value);
             }}
           />
+        </div>
+
+        {/* Pulsante di Conferma Condizionale - Compare fluidamente quando la data è selezionata */}
+        <div className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${currentDate ? 'mt-4 max-h-16 opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}>
+          <button
+            type="button"
+            onClick={handleConfirmDate}
+            className="w-full py-3.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold rounded-xl shadow-md transform active:scale-[0.98] transition-all text-sm uppercase tracking-wider"
+          >
+            Conferma Data e Cerca Posti
+          </button>
         </div>
 
         <div className="w-full mt-6 p-4 bg-amber-50/20 border border-orange-100/40 rounded-2xl text-[11px] text-center text-slate-500">
