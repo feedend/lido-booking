@@ -301,7 +301,17 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
               </p>
               
               <div className="bg-slate-50 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-600 border border-slate-100 mb-4">
-                <p className="border-b border-slate-200/60 pb-1"><strong>Data:</strong> {new Date(selectedDate).toLocaleDateString('it-IT')}</p>
+                <p className="border-b border-slate-200/60 pb-1">
+                  <strong>Data:</strong> {(() => {
+                    if (!selectedDate) return '';
+                    if (selectedDate.includes('-')) {
+                      const [anno, mese, giorno] = selectedDate.split('-');
+                      return `${giorno}/${mese}/${anno}`;
+                    }
+                    const safeDateStr = selectedDate.replace(/-/g, '/');
+                    return new Date(safeDateStr).toLocaleDateString('it-IT');
+                  })()}
+                </p>
                 <p className="border-b border-slate-200/60 pb-1"><strong>Bagnante:</strong> {userData.nome} {userData.cognome}</p>
                 <p className="border-b border-slate-200/60 pb-1"><strong>Componenti:</strong> {userData.numUtenti} persone</p>
                 {userData.prezzoExtra > 0 && (
