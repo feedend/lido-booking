@@ -163,7 +163,7 @@ export default function Home() {
 
       {/* Footer tecnico */}
       <div className="text-center mt-12 text-[10px] text-slate-400 uppercase tracking-widest font-medium">
-        WebPilot • Gestione Lido © {new Date().getFullYear()} V2.5
+        WP • Gestione Lido © {new Date().getFullYear()} Ver 3.0
       </div>
     </main>
   );
