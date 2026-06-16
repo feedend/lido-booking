@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 type CalendarProps = {
   categoria: string;
@@ -9,7 +9,7 @@ type CalendarProps = {
 export default function CalendarStep({ categoria, onDateSelect }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState('');
 
-  // Calcolo della data odierna locale
+  // Calcolo della data odierna locale con formattazione ISO pulita (Safe per Safari)
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -39,11 +39,25 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
   const maxDay = String(maxDate.getDate()).padStart(2, '0');
   const maxDateStr = `${maxYear}-${maxMonth}-${maxDay}`;
 
-  // Gestione della conferma esplicita della data per evitare i glitch di re-render di iOS
-  const handleConfirmDate = () => {
-    if (currentDate) {
-      onDateSelect(currentDate);
+  // Effetto di sicurezza: Se la categoria prevede "Solo Oggi" (0 giorni), preimpostiamo il valore
+  useEffect(() => {
+    if (daysAhead === 0) {
+      setCurrentDate(minDateStr);
     }
+  }, [daysAhead, minDateStr]);
+
+  // Gestione della conferma esplicita della data con controllo logico finale (Doppio Blocco iOS)
+  const handleConfirmDate = () => {
+    if (!currentDate) return;
+
+    // Controllo di sicurezza software per iOS: se la data supera i limiti, blocca l'azione
+    if (currentDate < minDateStr || currentDate > maxDateStr) {
+      alert(`Attenzione: Per la tariffa "${categoria}" puoi selezionare solo una data compresa tra il ${dd}/${mm}/${yyyy} e il ${maxDate.toLocaleDateString('it-IT')}.`);
+      setCurrentDate(daysAhead === 0 ? minDateStr : '');
+      return;
+    }
+
+    onDateSelect(currentDate);
   };
 
   return (
@@ -83,12 +97,12 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
           </span>
         </div>
         
-        {/* Testo di Contesto - Associato esplicitamente all'input tramite htmlFor */}
+        {/* Testo di Contesto */}
         <label htmlFor="lido-date-picker" className="text-sm text-slate-500 mb-6 text-center leading-relaxed max-w-[280px] cursor-pointer block">
           In base alla tariffa <span className="font-bold text-orange-600 block sm:inline">"{categoria}"</span>, puoi riservare fino al <span className="font-semibold text-slate-900 border-b-2 border-amber-400 pb-0.5">{maxDate.toLocaleDateString('it-IT')}</span>
         </label>
 
-        {/* Input Data con ID rigido e isolamento dello stato */}
+        {/* Input Data con ID rigido e attributi puliti per iOS */}
         <div className="w-full relative px-1">
           <input 
             id="lido-date-picker"
@@ -96,16 +110,14 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
             min={minDateStr}
             max={maxDateStr}
             value={currentDate}
-            className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-base font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-150 block dynamic-date-input"
+            className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-base font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-150 block"
             onChange={(e) => {
-              // Aggiorna SOLO lo stato locale. Non invoca onDateSelect qui in tempo reale,
-              // impedendo a Safari di distruggere il componente durante l'animazione di scorrimento.
               setCurrentDate(e.target.value);
             }}
           />
         </div>
 
-        {/* Pulsante di Conferma Condizionale - Compare fluidamente quando la data è selezionata */}
+        {/* Pulsante di Conferma Condizionale */}
         <div className={`w-full transition-all duration-300 ease-in-out overflow-hidden ${currentDate ? 'mt-4 max-h-16 opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}>
           <button
             type="button"
