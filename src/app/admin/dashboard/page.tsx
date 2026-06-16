@@ -16,7 +16,8 @@ import {
   Sun,
   CreditCard,
   Banknote,
-  Wallet
+  Wallet,
+  PlusCircle
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -41,6 +42,8 @@ interface Booking {
   booking_category: string | null;
   total_price?: number; 
   notes?: string | null; 
+  extra_sdraio?: number;   // <-- AGGIUNTO
+  extra_lettini?: number;  // <-- AGGIUNTO
 }
 
 export default function AdminDashboard() {
@@ -86,9 +89,10 @@ export default function AdminDashboard() {
 
       if (spotsErr) throw spotsErr;
 
+      // AGGIUNTI extra_sdraio E extra_lettini NELLA SELECT SEGUENTE
       const { data: bookingsData, error: bookErr } = await supabase
         .from('bookings')
-        .select('id, spot_id, guest_first_name, guest_last_name, guest_email, guest_phone, booking_category, total_price, notes, status')
+        .select('id, spot_id, guest_first_name, guest_last_name, guest_email, guest_phone, booking_category, total_price, notes, status, extra_sdraio, extra_lettini')
         .eq('booking_date', filterDate)
         .not('status', 'eq', 'cancelled');
 
@@ -234,14 +238,9 @@ export default function AdminDashboard() {
     }
   };
 
-  // --- LOGICA DI CONTEGGIO FINANZIARIO DIVISO ---
-  // Filtriamo al volo per i conteggi prendendo solo i confermati
   const prenotazioniConfermate = bookings.filter(b => (b as any).status === 'confirmed');
-
   const totaleGenerale = prenotazioniConfermate.reduce((sum, b) => sum + (b.total_price || 0), 0);
-  
   const giornalieriInLoco = prenotazioniConfermate.filter(b => b.booking_category === 'Giornaliero in loco');
-  
   const totaleGiornalieriInLoco = giornalieriInLoco.reduce((sum, b) => sum + (b.total_price || 0), 0);
   
   const totaleContanti = giornalieriInLoco
@@ -269,15 +268,15 @@ export default function AdminDashboard() {
     const isManuallyBlocked = correspondingSpot ? !correspondingSpot.is_available : false;
     const isDailyLocalBlock = booking?.booking_category === 'Giornaliero in loco';
 
-    let btnClass = "bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white";
+    let btnClass = "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-slate-900";
     if (isManuallyBlocked) {
-      btnClass = "bg-amber-500/20 border-amber-500/60 text-amber-400 hover:bg-amber-500/30 font-bold";
+      btnClass = "bg-amber-100 border-amber-400 text-amber-800 hover:bg-amber-200 font-bold";
     } else if (isDailyLocalBlock) {
-      btnClass = "bg-orange-500/20 border-orange-500/60 text-orange-400 hover:bg-orange-500/30 font-bold";
+      btnClass = "bg-orange-100 border-orange-400 text-orange-800 hover:bg-orange-200 font-bold";
     } else if (isBooked) {
-      btnClass = "bg-red-500/20 border-red-500/60 text-red-400 hover:bg-red-500/30";
+      btnClass = "bg-red-100 border-red-400 text-red-800 hover:bg-red-200";
     } else if (correspondingSpot) {
-      btnClass = "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20";
+      btnClass = "bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100";
     }
 
     const spotDataData = correspondingSpot || {
@@ -296,7 +295,7 @@ export default function AdminDashboard() {
       >
         {displayLabel}
         {isBooked && (
-          <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse ${isDailyLocalBlock ? 'bg-orange-400' : 'bg-red-500'}`} />
+          <span className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full animate-pulse ${isDailyLocalBlock ? 'bg-orange-500' : 'bg-red-600'}`} />
         )}
       </button>
     );
@@ -307,41 +306,41 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans">
       {/* Navbar */}
-      <nav className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="bg-orange-600 p-2 rounded-lg text-white shadow-md shadow-orange-600/20">
             <Layers className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-black tracking-wider text-white uppercase">Lido Control Panel</h1>
+              <h1 className="text-sm font-black tracking-wider text-slate-900 uppercase">Lido Control Panel</h1>
               <span className={`text-[9px] px-1.5 py-0.5 rounded-md uppercase font-bold border ${
-                ruolo === 'admin' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-blue-500/10 border-blue-500/20 text-blue-400'
+                ruolo === 'admin' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-blue-50 border-blue-200 text-blue-700'
               }`}>
                 {ruolo === 'admin' ? 'Admin' : 'Operatore'}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">Planimetria Simmetrica Real-Time</p>
+            <p className="text-[11px] text-slate-500">Planimetria Simmetrica Real-Time</p>
           </div>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
-            <span className="text-slate-400 font-bold uppercase text-[10px]">Data Mappa:</span>
+          <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
+            <span className="text-slate-600 font-bold uppercase text-[10px]">Data Mappa:</span>
             <input 
               type="date" 
               value={filterDate}
               onChange={(e) => setFilterDate(e.target.value)}
-              className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-0.5 text-white font-bold text-xs focus:outline-none focus:border-orange-500"
+              className="bg-white border border-slate-300 rounded-lg px-2 py-0.5 text-slate-900 font-bold text-xs focus:outline-none focus:border-orange-500"
             />
           </div>
 
           {ruolo === 'admin' ? (
             <button 
               onClick={() => router.push('/admin/prenotazioni')}
-              className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white border border-transparent rounded-xl transition"
+              className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white border border-transparent rounded-xl transition shadow-sm"
             >
               <FileText className="h-4 w-4" /> Registro
             </button>
@@ -356,7 +355,7 @@ export default function AdminDashboard() {
 
           <button 
             onClick={async () => { await supabase.auth.signOut(); router.push('/admin/login'); }}
-            className="flex items-center gap-2 bg-red-950/30 hover:bg-red-900/40 text-red-400 text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl border border-red-900/30 transition"
+            className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold uppercase tracking-wider px-4 py-2 rounded-xl border border-red-200 transition"
           >
             <LogOut className="h-4 w-4" /> Esci
           </button>
@@ -368,48 +367,48 @@ export default function AdminDashboard() {
         <div className="max-w-[1400px] mx-auto px-4 md:px-6 pt-6 grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in duration-200">
           
           {/* Box 1: Incasso Generale */}
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
+          <div className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-sm">
             <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Incasso Totale Giorno (Online+Loco)</p>
-              <p className="text-2xl font-mono font-black text-emerald-400 mt-1">{totaleGenerale.toFixed(2)} €</p>
+              <p className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Incasso Totale Giorno (Online+Loco)</p>
+              <p className="text-2xl font-mono font-black text-emerald-600 mt-1">{totaleGenerale.toFixed(2)} €</p>
             </div>
-            <div className="bg-emerald-500/10 p-3 rounded-xl text-emerald-400">
+            <div className="bg-emerald-50 p-3 rounded-xl text-emerald-600 border border-emerald-100">
               <Euro className="w-5 h-5" />
             </div>
           </div>
 
           {/* Box 2: Totale In Loco */}
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between shadow-lg">
+          <div className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-sm">
             <div>
-              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Totale Giornalieri in Loco</p>
-              <p className="text-2xl font-mono font-black text-orange-400 mt-1">{totaleGiornalieriInLoco.toFixed(2)} €</p>
+              <p className="text-[10px] font-bold uppercase text-slate-500 tracking-wider">Totale Giornalieri in Loco</p>
+              <p className="text-2xl font-mono font-black text-orange-600 mt-1">{totaleGiornalieriInLoco.toFixed(2)} €</p>
             </div>
-            <div className="bg-orange-500/10 p-3 rounded-xl text-orange-400">
+            <div className="bg-orange-50 p-3 rounded-xl text-orange-600 border border-orange-100">
               <Wallet className="w-5 h-5" />
             </div>
           </div>
 
           {/* Box 3: Breakdown Metodi di Pagamento in Loco */}
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col justify-center shadow-lg space-y-2">
-            <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">Dettaglio Cassa in Loco</p>
+          <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col justify-center shadow-sm space-y-2">
+            <p className="text-[10px] font-bold uppercase text-slate-500 tracking-wider mb-1">Dettaglio Cassa in Loco</p>
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="bg-slate-950 p-2 rounded-xl border border-slate-850">
+              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
                 <span className="text-[9px] font-black uppercase text-slate-500 flex items-center justify-center gap-1">
-                  <Banknote className="w-3 h-3 text-emerald-500" /> Contanti
+                  <Banknote className="w-3 h-3 text-emerald-600" /> Contanti
                 </span>
-                <p className="text-sm font-mono font-bold text-slate-200 mt-0.5">{totaleContanti.toFixed(2)} €</p>
+                <p className="text-sm font-mono font-bold text-slate-800 mt-0.5">{totaleContanti.toFixed(2)} €</p>
               </div>
-              <div className="bg-slate-950 p-2 rounded-xl border border-slate-850">
+              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
                 <span className="text-[9px] font-black uppercase text-slate-500 flex items-center justify-center gap-1">
-                  <CreditCard className="w-3 h-3 text-blue-500" /> POS
+                  <CreditCard className="w-3 h-3 text-blue-600" /> POS
                 </span>
-                <p className="text-sm font-mono font-bold text-slate-200 mt-0.5">{totalePOS.toFixed(2)} €</p>
+                <p className="text-sm font-mono font-bold text-slate-800 mt-0.5">{totalePOS.toFixed(2)} €</p>
               </div>
-              <div className="bg-slate-950 p-2 rounded-xl border border-slate-850">
+              <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
                 <span className="text-[9px] font-black uppercase text-slate-500 flex items-center justify-center gap-1">
-                  <Euro className="w-3 h-3 text-amber-500" /> Altro
+                  <Euro className="w-3 h-3 text-amber-600" /> Altro
                 </span>
-                <p className="text-sm font-mono font-bold text-slate-200 mt-0.5">{totaleAltro.toFixed(2)} €</p>
+                <p className="text-sm font-mono font-bold text-slate-800 mt-0.5">{totaleAltro.toFixed(2)} €</p>
               </div>
             </div>
           </div>
@@ -424,22 +423,22 @@ export default function AdminDashboard() {
           <div className="xl:col-span-3 space-y-6">
             
             {/* MAPPA SPIAGGIA */}
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4 shadow-xl overflow-x-auto">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-800 pb-4 gap-3 min-w-[920px]">
-                <h2 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+            <div className="bg-white border border-slate-200 p-5 rounded-3xl space-y-4 shadow-sm overflow-x-auto">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-3 min-w-[920px]">
+                <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
                   <Umbrella className="h-4 w-4 text-orange-500" /> Disposizione Speculare Spiaggia
                 </h2>
                 <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-wider">
-                  <span className="flex items-center gap-1.5 text-emerald-400"><span className="w-2.5 h-2.5 rounded-md bg-emerald-500/10 border border-emerald-500/30"></span> Attivo</span>
-                  <span className="flex items-center gap-1.5 text-red-400"><span className="w-2.5 h-2.5 rounded-md bg-red-500/20 border border-red-500/50"></span> Occupato</span>
-                  <span className="flex items-center gap-1.5 text-orange-400"><span className="w-2.5 h-2.5 rounded-md bg-orange-500/20 border border-orange-500/60"></span> Giornaliero Loco</span>
-                  <span className="flex items-center gap-1.5 text-amber-400"><span className="w-2.5 h-2.5 rounded-md bg-amber-500/20 border border-amber-500/60"></span> Bloccato Permanente</span>
+                  <span className="flex items-center gap-1.5 text-emerald-700"><span className="w-2.5 h-2.5 rounded-md bg-emerald-50 border border-emerald-300"></span> Attivo</span>
+                  <span className="flex items-center gap-1.5 text-red-700"><span className="w-2.5 h-2.5 rounded-md bg-red-100 border border-red-400"></span> Occupato</span>
+                  <span className="flex items-center gap-1.5 text-orange-700"><span className="w-2.5 h-2.5 rounded-md bg-orange-100 border border-orange-400"></span> Giornaliero Loco</span>
+                  <span className="flex items-center gap-1.5 text-amber-700"><span className="w-2.5 h-2.5 rounded-md bg-amber-100 border border-amber-400"></span> Bloccato Permanente</span>
                 </div>
               </div>
 
               <div className="flex flex-col gap-2.5 min-w-[920px] pt-2 pb-2">
                 {loading ? (
-                  <div className="text-center py-24 text-xs font-mono text-slate-500 animate-pulse uppercase tracking-widest">
+                  <div className="text-center py-24 text-xs font-mono text-slate-400 animate-pulse uppercase tracking-widest">
                     Sincronizzazione Layout...
                   </div>
                 ) : (
@@ -459,7 +458,7 @@ export default function AdminDashboard() {
                         )}
                       </div>
                       
-                      <div className="w-14 shrink-0 flex justify-center items-center font-black text-slate-500 uppercase text-[9px] tracking-widest bg-slate-950 py-2 rounded-xl border border-slate-800 shadow-inner text-center">
+                      <div className="w-14 shrink-0 flex justify-center items-center font-black text-slate-400 uppercase text-[9px] tracking-widest bg-slate-100 py-2 rounded-xl border border-slate-200 shadow-inner text-center">
                         {row.center || "•"}
                       </div>
                       
@@ -483,16 +482,16 @@ export default function AdminDashboard() {
             </div>
 
             {/* BOX SOLARIUM */}
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4 shadow-xl">
-              <div className="border-b border-slate-800 pb-4">
-                <h2 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
-                  <Sun className="h-4 w-4 text-amber-400" /> Area Solarium Terrazza
+            <div className="bg-white border border-slate-200 p-5 rounded-3xl space-y-4 shadow-sm">
+              <div className="border-b border-slate-100 pb-4">
+                <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                  <Sun className="h-4 w-4 text-amber-500" /> Area Solarium Terrazza
                 </h2>
-                <p className="text-[11px] text-slate-400 mt-0.5">Gestione 11 Lettini Esclusivi in Loco</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Gestione 11 Lettini Esclusivi in Loco</p>
               </div>
 
               {loading ? (
-                <div className="text-center py-6 text-xs font-mono text-slate-500 animate-pulse uppercase tracking-widest">
+                <div className="text-center py-6 text-xs font-mono text-slate-400 animate-pulse uppercase tracking-widest">
                   Caricamento Solarium...
                 </div>
               ) : (
@@ -505,19 +504,19 @@ export default function AdminDashboard() {
           </div>
 
           {/* PANNELLO DI DETTAGLIO ED ISPEZIONE */}
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl shadow-xl space-y-4">
-            <h3 className="text-xs font-black text-white uppercase tracking-wider border-b border-slate-800 pb-3">
+          <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm space-y-4">
+            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-3">
               Ispezione Postazione
             </h3>
             
             {selectedSpot ? (
               <div className="space-y-4 animate-in fade-in duration-150">
-                <div className="flex items-center justify-between bg-slate-950 p-3 rounded-2xl border border-slate-800">
-                  <span className="text-sm font-black text-white font-mono">Codice: {selectedSpot.internal_code}</span>
+                <div className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                  <span className="text-sm font-black text-slate-900 font-mono">Codice: {selectedSpot.internal_code}</span>
                   <span className={`px-2 py-0.5 text-[9px] rounded-lg font-black uppercase border ${
                     selectedSpot._booking?.booking_category === 'Giornaliero in loco'
-                      ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
-                      : selectedSpot.is_available ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                      ? 'bg-orange-50 text-orange-700 border-orange-200'
+                      : selectedSpot.is_available ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
                   }`}>
                     {selectedSpot._booking?.booking_category === 'Giornaliero in loco' 
                       ? 'In Loco' 
@@ -526,21 +525,45 @@ export default function AdminDashboard() {
                 </div>
 
                 {selectedSpot._booking ? (
-                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-2 text-xs">
-                    <p className="text-red-400 font-black uppercase tracking-wider text-[9px] flex items-center gap-1.5">
+                  <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-2 text-xs">
+                    <p className="text-red-700 font-black uppercase tracking-wider text-[9px] flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5" /> Informazioni Occupante:
                     </p>
-                    <div className="space-y-1.5 text-slate-300 font-mono mt-2">
-                      <p><strong className="text-slate-500">Tipo:</strong> {selectedSpot._booking.guest_first_name} {selectedSpot._booking.guest_last_name}</p>
-                      {selectedSpot._booking.guest_email && <p><strong className="text-slate-500">Email:</strong> {selectedSpot._booking.guest_email}</p>}
-                      {selectedSpot._booking.guest_phone && <p><strong className="text-slate-500">Tel:</strong> {selectedSpot._booking.guest_phone}</p>}
-                      <p><strong className="text-slate-500">Tariffa:</strong> <span className="text-orange-400 font-bold">{selectedSpot._booking.booking_category}</span></p>
+                    <div className="space-y-1.5 text-slate-700 font-mono mt-2">
+                      <p><strong className="text-slate-400">Tipo:</strong> {selectedSpot._booking.guest_first_name} {selectedSpot._booking.guest_last_name}</p>
+                      {selectedSpot._booking.guest_email && <p><strong className="text-slate-400">Email:</strong> {selectedSpot._booking.guest_email}</p>}
+                      {selectedSpot._booking.guest_phone && <p><strong className="text-slate-400">Tel:</strong> {selectedSpot._booking.guest_phone}</p>}
+                      <p><strong className="text-slate-400">Tariffa:</strong> <span className="text-orange-600 font-bold">{selectedSpot._booking.booking_category}</span></p>
                       {selectedSpot._booking.total_price !== undefined && (
-                        <p><strong className="text-slate-500">Pagato:</strong> <span className="text-emerald-400 font-bold">{selectedSpot._booking.total_price} €</span></p>
+                        <p><strong className="text-slate-400">Pagato:</strong> <span className="text-emerald-600 font-bold">{selectedSpot._booking.total_price} €</span></p>
                       )}
+
+                      {/* --- SEZIONE EXTRA IMPLEMENTATA SENZA ALTERARE IL COSTATO --- */}
+                      {((selectedSpot._booking.extra_sdraio && selectedSpot._booking.extra_sdraio > 0) || 
+                        (selectedSpot._booking.extra_lettini && selectedSpot._booking.extra_lettini > 0)) && (
+                        <div className="mt-2 pt-2 border-t border-slate-200 font-sans">
+                          <span className="text-[9px] uppercase font-black text-sky-700 flex items-center gap-1 mb-1">
+                            <PlusCircle className="w-3 h-3" /> Attrezzatura Extra ordinata:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {selectedSpot._booking.extra_sdraio > 0 && (
+                              <span className="bg-sky-50 border border-sky-200 text-sky-800 text-[10px] px-2 py-0.5 rounded-md font-bold">
+                                +{selectedSpot._booking.extra_sdraio} Sdraio
+                              </span>
+                            )}
+                            {selectedSpot._booking.extra_lettini > 0 && (
+                              <span className="bg-sky-50 border border-sky-200 text-sky-800 text-[10px] px-2 py-0.5 rounded-md font-bold">
+                                +{selectedSpot._booking.extra_lettini} Lettini
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {/* ----------------------------------------------------------- */}
+
                       {selectedSpot._booking.notes && (
-                        <p className="mt-2 pt-2 border-t border-slate-850 text-amber-400 font-sans">
-                          <strong className="text-slate-500 uppercase text-[9px] block mb-0.5">Note Interni / Metodo:</strong>
+                        <p className="mt-2 pt-2 border-t border-slate-200 text-amber-800 font-sans">
+                          <strong className="text-slate-400 uppercase text-[9px] block mb-0.5">Note Interni / Metodo:</strong>
                           {selectedSpot._booking.notes}
                         </p>
                       )}
@@ -548,43 +571,43 @@ export default function AdminDashboard() {
                     {selectedSpot._booking.booking_category === 'Giornaliero in loco' && (
                       <button
                         onClick={() => handleRemoveDailyBooking(selectedSpot._booking.id)}
-                        className="w-full mt-3 bg-red-900/40 hover:bg-red-900/60 border border-red-700/30 text-red-400 text-[10px] font-bold uppercase tracking-wider py-1.5 rounded-lg transition"
+                        className="w-full mt-3 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-[10px] font-bold uppercase tracking-wider py-1.5 rounded-lg transition"
                       >
                         Libera Giornaliero
                       </button>
                     )}
                   </div>
                 ) : (
-                  <p className="text-[11px] text-slate-500 font-medium italic text-center py-4 bg-slate-950/40 rounded-xl border border-slate-850">
+                  <p className="text-[11px] text-slate-500 font-medium italic text-center py-4 bg-slate-50 rounded-xl border border-slate-200">
                     Nessun occupante per il {new Date(filterDate).toLocaleDateString('it-IT')}.
                   </p>
                 )}
 
                 {selectedSpot.notes && !selectedSpot._booking && (
-                  <div className="text-xs bg-slate-950 p-3 border border-slate-800 rounded-xl text-amber-400 font-mono">
-                    <strong className="text-slate-500 uppercase text-[9px] block mb-0.5">Motivazione Blocco Permanente:</strong> 
+                  <div className="text-xs bg-slate-50 p-3 border border-slate-200 rounded-xl text-amber-800 font-mono">
+                    <strong className="text-slate-400 uppercase text-[9px] block mb-0.5">Motivazione Blocco Permanente:</strong> 
                     {selectedSpot.notes}
                   </div>
                 )}
 
                 {/* BLOCCO DELLE AZIONI AMMINISTRATIVE */}
-                <div className="space-y-3 bg-slate-950 p-4 border border-slate-800 rounded-2xl">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Azioni Amministrative</h4>
+                <div className="space-y-3 bg-slate-50 p-4 border border-slate-200 rounded-2xl">
+                  <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Azioni Amministrative</h4>
                   
                   {selectedSpot.is_available && !selectedSpot._booking ? (
                     <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-2 p-1 bg-slate-900 rounded-xl border border-slate-800">
+                      <div className="grid grid-cols-2 gap-2 p-1 bg-white rounded-xl border border-slate-200">
                         <button
                           type="button"
                           onClick={() => setBlockType('daily')}
-                          className={`py-1.5 text-[10px] font-black uppercase rounded-lg transition ${blockType === 'daily' ? 'bg-orange-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                          className={`py-1.5 text-[10px] font-black uppercase rounded-lg transition ${blockType === 'daily' ? 'bg-orange-600 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                           Giornaliero
                         </button>
                         <button
                           type="button"
                           onClick={() => setBlockType('permanent')}
-                          className={`py-1.5 text-[10px] font-black uppercase rounded-lg transition ${blockType === 'permanent' ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                          className={`py-1.5 text-[10px] font-black uppercase rounded-lg transition ${blockType === 'permanent' ? 'bg-amber-600 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
                         >
                           Permanente
                         </button>
@@ -596,18 +619,18 @@ export default function AdminDashboard() {
                           placeholder="Nota o motivo del blocco permanente..."
                           value={noteBlock}
                           onChange={(e) => setNoteBlock(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500 font-medium"
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-amber-500 font-medium"
                         />
                       ) : (
                         <div className="space-y-2">
                           <div className="relative">
-                            <span className="absolute left-3 top-2.5 text-xs text-slate-500 font-bold">€</span>
+                            <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">€</span>
                             <input 
                               type="number" 
                               placeholder="Prezzo pagato in loco..."
                               value={dailyPrice}
                               onChange={(e) => setDailyPrice(e.target.value)}
-                              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 pl-7 text-xs text-white focus:outline-none focus:border-orange-500 font-mono font-bold"
+                              className="w-full bg-white border border-slate-300 rounded-xl p-2.5 pl-7 text-xs text-slate-900 focus:outline-none focus:border-orange-500 font-mono font-bold"
                             />
                           </div>
 
@@ -615,13 +638,13 @@ export default function AdminDashboard() {
                             <label className="text-[9px] uppercase font-black text-slate-500 flex items-center gap-1">
                               <CreditCard className="w-3 h-3" /> Metodo Pagamento
                             </label>
-                            <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-900 border border-slate-800 rounded-xl">
+                            <div className="grid grid-cols-3 gap-1 p-0.5 bg-white border border-slate-200 rounded-xl">
                               {(['Contanti', 'POS', 'Altro'] as const).map((method) => (
                                 <button
                                   key={method}
                                   type="button"
                                   onClick={() => setPaymentMethod(method)}
-                                  className={`py-1 text-[10px] font-bold rounded-lg transition ${paymentMethod === method ? 'bg-slate-800 border border-slate-700 text-emerald-400 font-black' : 'text-slate-500 hover:text-slate-300'}`}
+                                  className={`py-1 text-[10px] font-bold rounded-lg transition ${paymentMethod === method ? 'bg-slate-800 border border-transparent text-white font-black' : 'text-slate-400 hover:text-slate-600'}`}
                                 >
                                   {method}
                                 </button>
@@ -634,7 +657,7 @@ export default function AdminDashboard() {
                             placeholder="Note aggiuntive..."
                             value={dailyNotes}
                             onChange={(e) => setDailyNotes(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-orange-500 font-medium"
+                            className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-orange-500 font-medium"
                           />
                         </div>
                       )}
@@ -655,16 +678,16 @@ export default function AdminDashboard() {
                         onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
                         className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-600/10"
                       >
-                        <CheckCircle className="h-4 w-4" /> Riattiva e Rendi Disponibile
+                        <CheckCircle className="h-4 w-4" /> Sblocca Postazione
                       </button>
                     )
                   )}
                 </div>
               </div>
             ) : (
-              <p className="text-slate-500 text-xs text-center py-16 font-medium italic">
-                Seleziona una postazione numerata o un lettino per verificarne i bagnanti o effettuarne la chiusura.
-              </p>
+              <div className="text-center py-12 text-slate-400 text-xs font-medium italic border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
+                Seleziona una postazione sulla mappa per ispezionarla ed eseguire azioni.
+              </div>
             )}
           </div>
 
