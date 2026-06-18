@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Html5Qrcode } from 'html5-qrcode'; // Usiamo la classe logica pura senza UI predefinita
+import { Html5Qrcode } from 'html5-qrcode';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -27,18 +27,14 @@ export default function OperatorDashboard() {
     details?: BookingDetails;
   } | null>(null);
 
-  // Utilizziamo un riferimento mutable per salvare l'istanza dello scanner e controllarla tra i render
   const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
 
-  // Inizializzazione della fotocamera posteriore all'avvio
   useEffect(() => {
-    // Creiamo l'istanza logica agganciandola al div "reader"
     const scanner = new Html5Qrcode("reader");
     html5QrcodeRef.current = scanner;
 
     startCamera(scanner);
 
-    // Smantellamento sicuro della fotocamera quando l'operatore esce dalla pagina
     return () => {
       if (scanner.isScanning) {
         scanner.stop()
@@ -48,27 +44,20 @@ export default function OperatorDashboard() {
     };
   }, []);
 
-  // Funzione dedicata all'avvio fisico dello stream video
   const startCamera = async (scannerInstance: Html5Qrcode) => {
     try {
       setLoading(true);
-      
-      // Utilizziamo le configurazioni native consigliate per il tracciamento mobile
       await scannerInstance.start(
-        // { facingMode: "environment" } costringe i dispositivi multi-camera ad aprire la fotocamera posteriore principale (grandangolare)
         { facingMode: "environment" },
         {
-          fps: 15, // Aumentato a 15 fps per una lettura fulminea sotto la luce del sole
+          fps: 15,
           qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0 // Evita distorsioni hardware della sorgente video
+          aspectRatio: 1.0
         },
         async (decodedText) => {
-          // Callback di lettura riuscita del QR
           await handleQrScanned(decodedText, scannerInstance);
         },
-        (errorMessage) => {
-          // Log silenzioso dei frame senza codice QR rilevato
-        }
+        (errorMessage) => {}
       );
       
       setIsCameraReady(true);
@@ -80,26 +69,20 @@ export default function OperatorDashboard() {
     }
   };
 
-  // Intercettore del QR per bloccare letture multiple concorrenti
   const handleQrScanned = async (qrData: string, scannerInstance: Html5Qrcode) => {
-    // Se stiamo già elaborando una richiesta a database, ignoriamo i frame successivi
     if (loading) return;
 
     try {
-      // Spegniamo fisicamente il sensore ottico non appena leggiamo il codice, per risparmiare batteria e bloccare l'inquadratura
       if (scannerInstance.isScanning) {
         await scannerInstance.stop();
       }
       setIsCameraReady(false);
-      
-      // Avviamo il controllo di validità sul database di Supabase
       await validaEInvalidaTicket(qrData);
     } catch (error) {
       console.error("Errore nel blocco della fotocamera:", error);
     }
   };
 
-// Logica core di validazione e annullamento sul database (Aggiornata per QR scaduti)
   const validaEInvalidaTicket = async (qrData: string) => {
     setLoading(true);
     setVerificationStatus(null);
@@ -126,6 +109,7 @@ export default function OperatorDashboard() {
         return;
       }
 
+      // Eseguiamo la query relazionale (assegnando un tipo locale any per evitare conflitti TypeScript sull'inner join)
       const { data: bookings, error: fetchError } = await supabase
         .from('bookings')
         .select(`
@@ -136,6 +120,7 @@ export default function OperatorDashboard() {
           guest_first_name,
           guest_last_name,
           guest_email,
+          created_at,
           spots!inner ( internal_code )
         `)
         .eq('booking_date', dataPart)
@@ -150,7 +135,22 @@ export default function OperatorDashboard() {
         return;
       }
 
-      const booking = bookings[0];
+      const booking = bookings[0] as any;
+      const dbInternalCode = booking.spots?.internal_code || postoPart;
+
+      // CONTROLLO TIMEOUT 15 MINUTI SE ANCORA PENDING
+      if (booking.status === 'pending') {
+        const quindiciMinutiFa = new Date(Date.now() - 15 * 60 * 1000);
+        const createdAtDate = new Date(booking.created_at);
+        
+        if (createdAtDate < quindiciMinutiFa) {
+          setVerificationStatus({
+            success: false,
+            message: "❌ Prenotazione scaduta! Il cliente ha abbandonato il pagamento oltre 15 minuti fa.",
+          });
+          return;
+        }
+      }
 
       if (booking.status === 'checked_in') {
         setVerificationStatus({
@@ -159,8 +159,8 @@ export default function OperatorDashboard() {
           details: {
             id: booking.id,
             booking_date: booking.booking_date,
-            internal_code: postoPart,
-            guest_name: `${booking.guest_first_name} ${booking.guest_last_name}`,
+            internal_code: dbInternalCode,
+            guest_name: `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`,
             guest_email: booking.guest_email,
             booking_category: booking.booking_category,
             status: 'GIÀ VALIDATO IN PRECEDENZA'
@@ -177,8 +177,6 @@ export default function OperatorDashboard() {
         return;
       }
 
-      // --- NUOVA LOGICA: CONTROLLO DATA SCADUTA ---
-      // Azzeriamo le ore per fare un confronto pulito tra i giorni
       const bookingDateObj = new Date(booking.booking_date);
       bookingDateObj.setHours(0, 0, 0, 0);
       const today = new Date();
@@ -186,7 +184,7 @@ export default function OperatorDashboard() {
 
       const isExpired = bookingDateObj < today;
 
-      // Eseguiamo COMUNQUE l'aggiornamento a database per "bruciare" il biglietto
+      // Aggiorniamo a database solo se la prenotazione è valida ed è ad esempio 'confirmed' o 'pending' valido
       const { error: updateError } = await supabase
         .from('bookings')
         .update({ status: 'checked_in' })
@@ -196,16 +194,15 @@ export default function OperatorDashboard() {
         throw new Error("Impossibile aggiornare lo stato di check-in: " + updateError.message);
       }
 
-      // Risposta condizionale basata sulla validità temporale
       if (isExpired) {
         setVerificationStatus({
-          success: false, // false così diventa rosso e l'operatore blocca l'ospite
-          message: `⚠️ DATA SCADUTA! Prenotazione del ${bookingDateObj.toLocaleDateString('it-IT')}. Il biglietto è stato comunque ANNULLATO nel database per sicurezza.`,
+          success: false,
+          message: `⚠️ DATA SCADUTA! Prenotazione del ${bookingDateObj.toLocaleDateString('it-IT')}. Il biglietto è stato comunque invalidato nel database.`,
           details: {
             id: booking.id,
             booking_date: booking.booking_date,
-            internal_code: postoPart,
-            guest_name: `${booking.guest_first_name} ${booking.guest_last_name}`,
+            internal_code: dbInternalCode,
+            guest_name: `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`,
             guest_email: booking.guest_email,
             booking_category: booking.booking_category,
             status: 'SCADUTO E ANNULLATO'
@@ -213,13 +210,13 @@ export default function OperatorDashboard() {
         });
       } else {
         setVerificationStatus({
-          success: true, // true così diventa verde
+          success: true,
           message: "✅ INGRESSO AUTORIZZATO! Biglietto validato correttamente.",
           details: {
             id: booking.id,
             booking_date: booking.booking_date,
-            internal_code: postoPart,
-            guest_name: `${booking.guest_first_name} ${booking.guest_last_name}`,
+            internal_code: dbInternalCode,
+            guest_name: `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`,
             guest_email: booking.guest_email,
             booking_category: booking.booking_category,
             status: 'CHECKED-IN (In Spiaggia)'
@@ -232,12 +229,13 @@ export default function OperatorDashboard() {
         success: false,
         message: "Errore di sincronizzazione hardware o di rete: " + err.message
       });
+    } catch {
+      setLoading(false);
     } finally {
       setLoading(false);
     }
   };
 
-  // Riavvia lo scanner in modo pulito senza fare il refresh dell'intera applicazione Next.js
   const riavviaScanner = () => {
     setVerificationStatus(null);
     if (html5QrcodeRef.current) {
@@ -255,10 +253,7 @@ export default function OperatorDashboard() {
         <p className="text-xs text-slate-400 mt-1">Inquadra il QR Code del bagnante per assegnare l'attrezzatura</p>
       </div>
 
-      {/* Area del mirino della Fotocamera */}
       <div className="overflow-hidden rounded-2xl bg-slate-950 border border-slate-800 p-2 shadow-inner relative aspect-square flex items-center justify-center">
-        
-        {/* Il contenitore video originale rimane fisso nel DOM per evitare anomalie di rimozione dei tag canvas */}
         <div 
           id="reader" 
           className={`w-full h-full rounded-xl overflow-hidden [&>video]:object-cover [&>video]:w-full [&>video]:h-full ${
@@ -286,7 +281,6 @@ export default function OperatorDashboard() {
         )}
       </div>
 
-      {/* Output del Verificatore */}
       {verificationStatus && (
         <div className={`mt-5 p-4 rounded-2xl border text-sm transition-all duration-300
           ${verificationStatus.success 
