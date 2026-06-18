@@ -36,7 +36,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   const [selectedSpotNumber, setSelectedSpotNumber] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
-  const [bookingSuccess, setBookingSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -52,17 +51,17 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
           setDbSpots(spotsData);
         }
 
-        // Calcoliamo la soglia temporale esatta di 15 minutes fa in formato ISO
         const quindiciMinutiFa = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
-        // Modifica sicura: Carica solo confermati o pending creati negli ultimi 15 minuti
+        // Carica le prenotazioni che bloccano il posto (confermate oppure in attesa nate negli ultimi 15 min)
         const { data: bookingsData } = await supabase
           .from('bookings')
-          .select('spot_id, status, booking_category') 
+          .select('spot_id') 
           .eq('booking_date', selectedDate)
+          .not('status', 'eq', 'cancelled')
           .or(`status.eq.confirmed,and(status.eq.pending,created_at.gt.${quindiciMinutiFa})`);
 
-        if (bookingsData && spotsData) {
+        if (bookingsData) {
           const occupatiIds = bookingsData
             .map(b => b.spot_id)
             .filter(id => id !== null) as string[];
@@ -126,11 +125,33 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      // Controllo preventivo di disponibilità concorrente
+      const quindiciMinutiFa = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+      // 1. CONTROLLO CONCORRENZA REALE: Qualcuno ha preso QUESTO specifico posto nell'ultimo minuto?
+      const { data: spotCheck } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('booking_date', selectedDate)
+        .eq('spot_id', matchingSpot.id)
+        .not('status', 'eq', 'cancelled')
+        .or(`status.eq.confirmed,and(status.eq.pending,created_at.gt.${quindiciMinutiFa})`);
+
+      if (spotCheck && spotCheck.length > 0) {
+        alert("Ops! Questa postazione è stata appena selezionata o prenotata da un altro utente. Scegli un altro ombrellone.");
+        // Aggiorna localmente i posti riservati per mostrare la X rossa
+        setReservedSpots(prev => [...prev, matchingSpot.id]);
+        setSelectedSpotNumber(null);
+        setIsSubmitting(false);
+        setPaymentProcessing(false);
+        return;
+      }
+
+      // 2. CONTROLLO DOPPIA PRENOTAZIONE UTENTE: Ottimizzato prendendo solo i record di questa email
       const { data: existingBookings, error: fetchError } = await supabase
         .from('bookings')
-        .select('guest_email')
+        .select('id')
         .eq('booking_date', selectedDate)
+        .ilike('guest_email', userData.email.trim())
         .not('status', 'eq', 'cancelled');
 
       if (fetchError) {
@@ -140,8 +161,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      const haGiaPrenotato = existingBookings?.some(b => b.guest_email?.toLowerCase() === userData.email.toLowerCase());
-      if (haGiaPrenotato) {
+      if (existingBookings && existingBookings.length > 0) {
         alert(`Attenzione! Risulta già una prenotazione attiva a nome di ${userData.email} per la data selezionata.`);
         setPaymentProcessing(false);
         setIsSubmitting(false);
