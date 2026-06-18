@@ -224,13 +224,11 @@ export default function OperatorDashboard() {
         });
       }
 
-    } catch (err: any) {
+ } catch (err: any) {
       setVerificationStatus({
         success: false,
         message: "Errore di sincronizzazione hardware o di rete: " + err.message
       });
-    } catch {
-      setLoading(false);
     } finally {
       setLoading(false);
     }
