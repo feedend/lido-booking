@@ -53,13 +53,13 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
         const quindiciMinutiFa = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
-        // Carica le prenotazioni che bloccano il posto (confermate oppure in attesa nate negli ultimi 15 min)
+        // Carica TUTTI i posti occupati per oggi, includendo sia confermati che check-in attivi
         const { data: bookingsData } = await supabase
           .from('bookings')
           .select('spot_id') 
           .eq('booking_date', selectedDate)
           .not('status', 'eq', 'cancelled')
-          .or(`status.eq.confirmed,and(status.eq.pending,created_at.gt.${quindiciMinutiFa})`);
+          .or(`status.eq.confirmed,status.eq.checked_in,and(status.eq.pending,created_at.gt.${quindiciMinutiFa})`);
 
         if (bookingsData) {
           const occupatiIds = bookingsData
