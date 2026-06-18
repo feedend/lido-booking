@@ -42,8 +42,8 @@ interface Booking {
   booking_category: string | null;
   total_price?: number; 
   notes?: string | null; 
-  extra_sdraio?: number;   // <-- AGGIUNTO
-  extra_lettini?: number;  // <-- AGGIUNTO
+  extra_sdraio?: number;  
+  extra_lettini?: number; 
 }
 
 export default function AdminDashboard() {
@@ -89,12 +89,16 @@ export default function AdminDashboard() {
 
       if (spotsErr) throw spotsErr;
 
-      // AGGIUNTI extra_sdraio E extra_lettini NELLA SELECT SEGUENTE
+      // Generiamo il timestamp ISO di 15 minuti fa
+      const quindiciMinutiFa = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+      // Query modificata con filtro or(...) per gestire i pending temporanei
       const { data: bookingsData, error: bookErr } = await supabase
         .from('bookings')
         .select('id, spot_id, guest_first_name, guest_last_name, guest_email, guest_phone, booking_category, total_price, notes, status, extra_sdraio, extra_lettini')
         .eq('booking_date', filterDate)
-        .not('status', 'eq', 'cancelled');
+        .not('status', 'eq', 'cancelled')
+        .or(`status.eq.confirmed,status.eq.checked_in,and(status.eq.pending,created_at.gt.${quindiciMinutiFa})`);
 
       if (bookErr) throw bookErr;
 
@@ -238,7 +242,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const prenotazioniConfermate = bookings.filter(b => (b as any).status === 'confirmed');
+  const prenotazioniConfermate = bookings.filter(b => (b as any).status === 'confirmed' || (b as any).status === 'checked_in');
   const totaleGenerale = prenotazioniConfermate.reduce((sum, b) => sum + (b.total_price || 0), 0);
   const giornalieriInLoco = prenotazioniConfermate.filter(b => b.booking_category === 'Giornaliero in loco');
   const totaleGiornalieriInLoco = giornalieriInLoco.reduce((sum, b) => sum + (b.total_price || 0), 0);
@@ -538,7 +542,6 @@ export default function AdminDashboard() {
                         <p><strong className="text-slate-400">Pagato:</strong> <span className="text-emerald-600 font-bold">{selectedSpot._booking.total_price} €</span></p>
                       )}
 
-                      {/* --- SEZIONE EXTRA IMPLEMENTATA SENZA ALTERARE IL COSTATO --- */}
                       {((selectedSpot._booking.extra_sdraio && selectedSpot._booking.extra_sdraio > 0) || 
                         (selectedSpot._booking.extra_lettini && selectedSpot._booking.extra_lettini > 0)) && (
                         <div className="mt-2 pt-2 border-t border-slate-200 font-sans">
@@ -559,7 +562,6 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                       )}
-                      {/* ----------------------------------------------------------- */}
 
                       {selectedSpot._booking.notes && (
                         <p className="mt-2 pt-2 border-t border-slate-200 text-amber-800 font-sans">
@@ -654,7 +656,7 @@ export default function AdminDashboard() {
 
                           <input 
                             type="text" 
-                            placeholder="Note aggiuntive..."
+                            placeholder="Note aggiuntive (es. Cognome)..."
                             value={dailyNotes}
                             onChange={(e) => setDailyNotes(e.target.value)}
                             className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-orange-500 font-medium"
@@ -663,30 +665,34 @@ export default function AdminDashboard() {
                       )}
 
                       <button
+                        type="button"
                         onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
-                        className={`w-full text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg ${
-                          blockType === 'permanent' ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/10' : 'bg-orange-600 hover:bg-orange-700 shadow-orange-600/10'
+                        className={`w-full text-xs font-black uppercase tracking-wider py-2.5 rounded-xl transition shadow-md ${
+                          blockType === 'permanent' 
+                            ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/10' 
+                            : 'bg-orange-600 hover:bg-orange-700 text-white shadow-orange-600/10'
                         }`}
                       >
-                        <XCircle className="h-4 w-4" /> 
-                        {blockType === 'permanent' ? 'Blocca ad Oltranza' : 'Conferma Giornaliero'}
+                        {blockType === 'permanent' ? 'Conferma Blocco Permanente' : 'Conferma Assegnazione Loco'}
                       </button>
                     </div>
                   ) : (
-                    selectedSpot.is_available === false && (
-                      <button
-                        onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-600/10"
-                      >
-                        <CheckCircle className="h-4 w-4" /> Sblocca Postazione
-                      </button>
-                    )
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-2.5 rounded-xl transition shadow-md shadow-emerald-600/10"
+                    >
+                      Sblocca / Rendi Disponibile
+                    </button>
                   )}
                 </div>
+
               </div>
             ) : (
-              <div className="text-center py-12 text-slate-400 text-xs font-medium italic border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
-                Seleziona una postazione sulla mappa per ispezionarla ed eseguire azioni.
+              <div className="text-center py-12 text-slate-400">
+                <Umbrella className="w-8 h-8 mx-auto stroke-1 mb-2 animate-bounce" />
+                <p className="text-xs font-medium uppercase tracking-wider">Seleziona una postazione</p>
+                <p className="text-[11px] text-slate-400 mt-1 font-normal">Clicca su un ombrellone o lettino solarium per ispezionare lo stato del database in tempo reale.</p>
               </div>
             )}
           </div>
