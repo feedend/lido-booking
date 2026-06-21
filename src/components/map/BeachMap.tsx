@@ -197,6 +197,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     }
   };
 
+  // Spostate le file secondo la nuova disposizione della spiaggia
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "P" },
@@ -207,8 +208,8 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     { startL: 121, endL: 129, startR: 130, endR: 139, center: "R" },
     { startL: 140, endL: 146, startR: 147, endR: 154, center: "E" },
     { startL: 155, endL: 160, startR: 161, endR: 167, center: "L" },
-    { startL: null, endL: null, startR: 168, endR: 171, center: "L" },
-    { startL: null, endL: null, startR: 172, endR: 174, center: "A" },
+    { startL: null, endL: null, startR: 168, endR: 171, center: "L" }, // Fila 168 spostata sotto la fila del 161-167
+    { startL: null, endL: null, startR: 172, endR: 174, center: "A" }, // Fila 172 posizionata sotto la fila del 168-171
   ];
 
   const renderSpot = (num: number) => {
