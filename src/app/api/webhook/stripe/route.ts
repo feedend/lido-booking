@@ -2,10 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
-// ▀▄▀▄▀▄ MODIFICA DI SICUREZZA PER IL DEPLOY SU VERCEL ▄▀▄▀▄▀
-// Forza la route a essere dinamica al 100% (evita il blocco in fase di build)
 export const dynamic = 'force-dynamic';
-// Specifica l'ambiente Node.js standard per gestire payload e firme crittografiche
 export const runtime = 'nodejs'; 
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
@@ -37,10 +34,18 @@ export async function POST(request: Request) {
   // Gestiamo l'evento di pagamento andato a buon fine
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;
+    
+    // Sicurezza estrema: controlliamo che la sessione sia effettivamente pagata 
+    // (evita bug in caso di configurazioni future con pagamenti differiti o rateali)
+    if (session.payment_status !== 'paid') {
+      console.log(`⚠️ Sessione completata ma stato pagamento non 'paid': ${session.id}`);
+      return NextResponse.json({ received: true });
+    }
+
     const bookingId = session.metadata?.booking_id;
 
     if (bookingId) {
-      console.log(`PAGAMENTO CONFERMATO per la prenotazione: ${bookingId}`);
+      console.log(`💰 PAGAMENTO CONFERMATO per la prenotazione: ${bookingId}`);
       
       // Aggiorniamo lo stato su Supabase a 'confirmed'
       const { error } = await supabaseAdmin
@@ -49,11 +54,17 @@ export async function POST(request: Request) {
         .eq('id', bookingId);
 
       if (error) {
-        console.error(`Errore aggiornamento DB per prenotazione ${bookingId}:`, error);
-        return NextResponse.json({ error: "Errore aggiornamento database" }, { status: 500 });
+        console.error(`❌ Errore aggiornamento DB per prenotazione ${bookingId}:`, error);
+        // CRITICO: Restituiamo un errore 500 a Stripe!
+        // In questo modo Stripe sa che il server ha fallito e riproverà a inviare il webhook 
+        // automaticamente poco dopo, salvando la prenotazione non appena il DB torna disponibile.
+        return NextResponse.json({ error: "Errore temporaneo aggiornamento database" }, { status: 500 });
       }
+
+      console.log(`✅ Prenotazione ${bookingId} aggiornata con successo a 'confirmed'.`);
     }
   }
 
+  // Risposta standard di ricezione andata a buon fine per Stripe
   return NextResponse.json({ received: true });
 }
