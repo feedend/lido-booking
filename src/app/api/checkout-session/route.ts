@@ -2,9 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 
-// 1. Forza il comportamento totalmente dinamico lato server
 export const dynamic = 'force-dynamic';
-// 2. Forza esplicitamente il runtime a Node.js (evita l'ottimizzazione statica delle pagine)
 export const runtime = 'nodejs'; 
 
 const supabaseAdmin = createClient(
@@ -23,12 +21,57 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { selectedDate, prezzoFinale, spotId, spotNumber, userData } = body;
+    const { selectedDate, spotId, spotNumber, userData } = body;
 
-    // --- PULIZIA SICURA DEI PENDING SCADUTI (COMPATIBILE AL 100% CON IL DEPLOY) ---
+    // =========================================================================
+    // 🛡️ CONTROLLO E VALIDAZIONE PARAMETRI EXTRA (Risolve il bug dei 20 pezzi)
+    // =========================================================================
+    const extraSdraio = parseInt(userData.extraSdraio) || 0;
+    const extraLettini = parseInt(userData.extraLettini) || 0;
+    const pezziTotaliExtra = extraSdraio + extraLettini;
+
+    // Blocca immediatamente se i limiti frontend sono stati forzati o manomessi
+    if (pezziTotaliExtra > 3 || extraLettini > 1 || extraSdraio < 0 || extraLettini < 0) {
+      return NextResponse.json({ error: "Configurazione attrezzatura extra non consentita." }, { status: 400 });
+    }
+
+    // =========================================================================
+    // 🛡️ RICALCOLO FORZATO DEL PREZZO SUL SERVER (Risolve il bug del prezzo a 0€)
+    // =========================================================================
+    const quotaBaseOmbrellone = 2.0;
+    const quotaBaseSdraio = 1.5; 
+    const COSTO_PEZZO_EXTRA = 1.50;
+
+    let supplementoPersona = 0.0;
+    const catLower = userData.categoria ? userData.categoria.toLowerCase().trim() : '';
+
+    if (catLower.includes('parenti')) {
+      supplementoPersona = 3.5;
+    } else if (catLower === 'esercito') {
+      supplementoPersona = 1.5;
+    } else if (catLower.includes('altra forza armata')) {
+      supplementoPersona = 3.5;
+    } else if (catLower.includes('quiescenza')) {
+      supplementoPersona = 1.5;
+    } else if (catLower === 'giornaliero') {
+      supplementoPersona = 3.5;
+    }
+
+    const costoStrutturaBase = quotaBaseOmbrellone + quotaBaseSdraio;
+    const costoComponenti = (parseInt(userData.numUtenti) || 1) * supplementoPersona;
+    const prezzoExtraReale = pezziTotaliExtra * COSTO_PEZZO_EXTRA;
+
+    // Il server ignora body.prezzoFinale e usa solo questa variabile blindata
+    const prezzoFinaleSicuro = costoStrutturaBase + costoComponenti + prezzoExtraReale;
+
+    if (prezzoFinaleSicuro <= 0) {
+      return NextResponse.json({ error: "Errore nel calcolo di sicurezza della tariffa." }, { status: 400 });
+    }
+    // =========================================================================
+
+    // --- PULIZIA SICURA DEI PENDING SCADUTI ---
     const quindiciMinutiFa = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
-    // 1. Recuperiamo i record pending per quella data che corrispondono all'ombrellone O alla mail
     const { data: pendingPrecedenti } = await supabaseAdmin
       .from('bookings')
       .select('id, created_at')
@@ -36,7 +79,6 @@ export async function POST(request: Request) {
       .eq('status', 'pending')
       .or(`spot_id.eq.${spotId},guest_email.eq.${userData.email}`);
 
-    // 2. Se ci sono, filtriamo quelli creati PRIMA dei 15 minuti fa ed eliminiamoli per ID
     if (pendingPrecedenti && pendingPrecedenti.length > 0) {
       const idsDaEliminare = pendingPrecedenti
         .filter(b => b.created_at < quindiciMinutiFa)
@@ -49,24 +91,23 @@ export async function POST(request: Request) {
           .in('id', idsDaEliminare);
       }
     }
-    // -----------------------------------------------------------------------------
 
-    // Creiamo la prenotazione in stato 'pending' nel database
+    // Creiamo la prenotazione in stato 'pending' nel database con i dati validati
     const { data: newBooking, error: dbError } = await supabaseAdmin
       .from('bookings')
       .insert({
         spot_id: spotId,
         booking_date: selectedDate,
         status: 'pending',
-        total_price: prezzoFinale,
-        num_guests: userData.numUtenti,
+        total_price: prezzoFinaleSicuro, // <-- Usiamo il prezzo calcolato dal server
+        num_guests: parseInt(userData.numUtenti) || 1,
         booking_category: userData.categoria,
         guest_first_name: userData.nome,
         guest_last_name: userData.cognome,
         guest_email: userData.email,
         guest_phone: userData.telefono || null,
-        extra_sdraio: userData.extraSdraio || 0,
-        extra_lettini: userData.extraLettini || 0
+        extra_sdraio: extraSdraio,       // <-- Usiamo la variabile sanitizzata
+        extra_lettini: extraLettini      // <-- Usiamo la variabile sanitizzata
       })
       .select()
       .single();
@@ -76,8 +117,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Postazione non disponibile o già riservata per questa data." }, { status: 400 });
     }
 
-    // Prepariamo la sessione di Stripe convertendo il prezzo in centesimi
-    const amountInCents = Math.round(prezzoFinale * 100);
+    // Prepariamo la sessione di Stripe usando il prezzo sicuro
+    const amountInCents = Math.round(prezzoFinaleSicuro * 100);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -106,9 +147,9 @@ export async function POST(request: Request) {
         guest_email: userData.email,
         spot_number: String(spotNumber),
         booking_category: userData.categoria,
-        extra_sdraio: String(userData.extraSdraio || 0),
-        extra_lettini: String(userData.extraLettini || 0),
-        total_price: String(prezzoFinale),
+        extra_sdraio: String(extraSdraio),
+        extra_lettini: String(extraLettini),
+        total_price: String(prezzoFinaleSicuro),
         num_guests: String(userData.numUtenti)
       },
     });
