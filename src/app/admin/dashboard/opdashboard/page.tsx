@@ -16,8 +16,6 @@ interface BookingDetails {
   guest_email: string;
   booking_category: string;
   status: string;
-  extra_sdraio: number;   // Aggiunto campo extra dello schema DB
-  extra_lettini: number;  // Aggiunto campo extra dello schema DB
 }
 
 export default function OperatorDashboard() {
@@ -111,7 +109,7 @@ export default function OperatorDashboard() {
         return;
       }
 
-      // Selezioniamo anche extra_sdraio ed extra_lettini direttamente dal DB
+      // Eseguiamo la query relazionale (assegnando un tipo locale any per evitare conflitti TypeScript sull'inner join)
       const { data: bookings, error: fetchError } = await supabase
         .from('bookings')
         .select(`
@@ -123,8 +121,6 @@ export default function OperatorDashboard() {
           guest_last_name,
           guest_email,
           created_at,
-          extra_sdraio,
-          extra_lettini,
           spots!inner ( internal_code )
         `)
         .eq('booking_date', dataPart)
@@ -167,9 +163,7 @@ export default function OperatorDashboard() {
             guest_name: `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`,
             guest_email: booking.guest_email,
             booking_category: booking.booking_category,
-            status: 'GIÀ VALIDATO IN PRECEDENZA',
-            extra_sdraio: booking.extra_sdraio || 0,
-            extra_lettini: booking.extra_lettini || 0
+            status: 'GIÀ VALIDATO IN PRECEDENZA'
           }
         });
         return;
@@ -211,9 +205,7 @@ export default function OperatorDashboard() {
             guest_name: `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`,
             guest_email: booking.guest_email,
             booking_category: booking.booking_category,
-            status: 'SCADUTO E ANNULLATO',
-            extra_sdraio: booking.extra_sdraio || 0,
-            extra_lettini: booking.extra_lettini || 0
+            status: 'SCADUTO E ANNULLATO'
           }
         });
       } else {
@@ -227,9 +219,7 @@ export default function OperatorDashboard() {
             guest_name: `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`,
             guest_email: booking.guest_email,
             booking_category: booking.booking_category,
-            status: 'CHECKED-IN (In Spiaggia)',
-            extra_sdraio: booking.extra_sdraio || 0,
-            extra_lettini: booking.extra_lettini || 0
+            status: 'CHECKED-IN (In Spiaggia)'
           }
         });
       }
@@ -302,16 +292,6 @@ export default function OperatorDashboard() {
           {verificationStatus.details && (
             <div className="space-y-1.5 font-mono text-[11px] bg-black/30 p-3 rounded-xl border border-white/5 text-slate-300">
               <p><strong>N° OMBRELLONE:</strong> <span className="text-sky-400 text-sm font-bold">{verificationStatus.details.internal_code}</span></p>
-              
-              {/* Box di rendering condizionale per l'attrezzatura extra */}
-              {(verificationStatus.details.extra_sdraio > 0 || verificationStatus.details.extra_lettini > 0) && (
-                <div className="my-2 p-2 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-lg space-y-0.5">
-                  <p className="font-black text-[10px] text-amber-400 uppercase tracking-wider">Attrezzatura Extra:</p>
-                  {verificationStatus.details.extra_sdraio > 0 && <p>🪑 +{verificationStatus.details.extra_sdraio} Sdraio</p>}
-                  {verificationStatus.details.extra_lettini > 0 && <p>☀️ +{verificationStatus.details.extra_lettini} Lettini</p>}
-                </div>
-              )}
-
               <p><strong>OSPITE:</strong> {verificationStatus.details.guest_name}</p>
               <p><strong>EMAIL:</strong> {verificationStatus.details.guest_email}</p>
               <p><strong>TARIFFA:</strong> {verificationStatus.details.booking_category}</p>
