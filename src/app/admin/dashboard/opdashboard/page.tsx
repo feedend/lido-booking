@@ -8,6 +8,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
+const POSTI_DISABILI = [30, 51, 70, 91, 110, 130];
+
 interface BookingDetails {
   id: string;
   booking_date: string;
@@ -16,6 +18,8 @@ interface BookingDetails {
   guest_email: string;
   booking_category: string;
   status: string;
+  extraSdraio: number;  // Allineato a extra_sdraio
+  extraLettini: number; // Allineato a extra_lettini
 }
 
 export default function OperatorDashboard() {
@@ -109,7 +113,7 @@ export default function OperatorDashboard() {
         return;
       }
 
-      // Eseguiamo la query relazionale (assegnando un tipo locale any per evitare conflitti TypeScript sull'inner join)
+      // Query relazionale estrattiva con i campi reali del tuo schema PostgreSQL
       const { data: bookings, error: fetchError } = await supabase
         .from('bookings')
         .select(`
@@ -119,8 +123,12 @@ export default function OperatorDashboard() {
           booking_category,
           guest_first_name,
           guest_last_name,
+          guest_nome,
+          guest_cognome,
           guest_email,
           created_at,
+          extra_sdraio,
+          extra_lettini,
           spots!inner ( internal_code )
         `)
         .eq('booking_date', dataPart)
@@ -137,6 +145,10 @@ export default function OperatorDashboard() {
 
       const booking = bookings[0] as any;
       const dbInternalCode = booking.spots?.internal_code || postoPart;
+
+      // Risoluzione dinamica del nome (controlla sia first_name sia nome)
+      const ospiteNome = booking.guest_first_name || booking.guest_nome || '';
+      const ospiteCognome = booking.guest_last_name || booking.guest_cognome || '';
 
       // CONTROLLO TIMEOUT 15 MINUTI SE ANCORA PENDING
       if (booking.status === 'pending') {
@@ -160,10 +172,12 @@ export default function OperatorDashboard() {
             id: booking.id,
             booking_date: booking.booking_date,
             internal_code: dbInternalCode,
-            guest_name: `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`,
+            guest_name: `${ospiteNome} ${ospiteCognome}`.trim() || 'Non indicato',
             guest_email: booking.guest_email,
             booking_category: booking.booking_category,
-            status: 'GIÀ VALIDATO IN PRECEDENZA'
+            status: 'GIÀ VALIDATO IN PRECEDENZA',
+            extraSdraio: booking.extra_sdraio || 0,
+            extraLettini: booking.extra_lettini || 0
           }
         });
         return;
@@ -184,7 +198,6 @@ export default function OperatorDashboard() {
 
       const isExpired = bookingDateObj < today;
 
-      // Aggiorniamo a database solo se la prenotazione è valida ed è ad esempio 'confirmed' o 'pending' valido
       const { error: updateError } = await supabase
         .from('bookings')
         .update({ status: 'checked_in' })
@@ -202,10 +215,12 @@ export default function OperatorDashboard() {
             id: booking.id,
             booking_date: booking.booking_date,
             internal_code: dbInternalCode,
-            guest_name: `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`,
+            guest_name: `${ospiteNome} ${ospiteCognome}`.trim() || 'Non indicato',
             guest_email: booking.guest_email,
             booking_category: booking.booking_category,
-            status: 'SCADUTO E ANNULLATO'
+            status: 'SCADUTO E ANNULLATO',
+            extraSdraio: booking.extra_sdraio || 0,
+            extraLettini: booking.extra_lettini || 0
           }
         });
       } else {
@@ -216,15 +231,17 @@ export default function OperatorDashboard() {
             id: booking.id,
             booking_date: booking.booking_date,
             internal_code: dbInternalCode,
-            guest_name: `${booking.guest_first_name || ''} ${booking.guest_last_name || ''}`,
+            guest_name: `${ospiteNome} ${ospiteCognome}`.trim() || 'Non indicato',
             guest_email: booking.guest_email,
             booking_category: booking.booking_category,
-            status: 'CHECKED-IN (In Spiaggia)'
+            status: 'CHECKED-IN (In Spiaggia)',
+            extraSdraio: booking.extra_sdraio || 0,
+            extraLettini: booking.extra_lettini || 0
           }
         });
       }
 
- } catch (err: any) {
+    } catch (err: any) {
       setVerificationStatus({
         success: false,
         message: "Errore di sincronizzazione hardware o di rete: " + err.message
@@ -291,7 +308,28 @@ export default function OperatorDashboard() {
 
           {verificationStatus.details && (
             <div className="space-y-1.5 font-mono text-[11px] bg-black/30 p-3 rounded-xl border border-white/5 text-slate-300">
-              <p><strong>N° OMBRELLONE:</strong> <span className="text-sky-400 text-sm font-bold">{verificationStatus.details.internal_code}</span></p>
+              <p className="flex justify-between items-center border-b border-white/5 pb-1 mb-1">
+                <span><strong>N° OMBRELLONE:</strong></span> 
+                <span className="text-sky-400 text-sm font-black bg-sky-950/50 px-2 py-0.5 rounded border border-sky-800">
+                  {verificationStatus.details.internal_code} {POSTI_DISABILI.includes(parseInt(verificationStatus.details.internal_code)) ? '♿' : ''}
+                </span>
+              </p>
+              
+              {/* INTERFACCIA AGGIORNATA CON I CAMPI REALI DEL DB */}
+              {(verificationStatus.details.extraSdraio > 0 || verificationStatus.details.extraLettini > 0) ? (
+                <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-lg p-2 my-2 space-y-0.5 animate-pulse">
+                  <p className="font-black text-[10px] text-amber-400 uppercase tracking-wider mb-1">⚠️ ATTREZZATURA AGGIUNTIVA DA CONSEGNARE:</p>
+                  {verificationStatus.details.extraSdraio > 0 && (
+                    <p className="text-xs font-bold">🪑 + {verificationStatus.details.extraSdraio} Sdraio Extra</p>
+                  )}
+                  {verificationStatus.details.extraLettini > 0 && (
+                    <p className="text-xs font-bold">☀️ + {verificationStatus.details.extraLettini} Lettini Extra</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-500 text-[10px] italic py-1 border-b border-white/5 mb-1">Nessun pezzo extra ordinato</p>
+              )}
+
               <p><strong>OSPITE:</strong> {verificationStatus.details.guest_name}</p>
               <p><strong>EMAIL:</strong> {verificationStatus.details.guest_email}</p>
               <p><strong>TARIFFA:</strong> {verificationStatus.details.booking_category}</p>
