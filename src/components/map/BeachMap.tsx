@@ -53,7 +53,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
         const quindiciMinutiFa = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
-        // Carica TUTTI i posti occupati per oggi, includendo sia confermati che check-in attivi
         const { data: bookingsData } = await supabase
           .from('bookings')
           .select('spot_id') 
@@ -127,7 +126,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
       const quindiciMinutiFa = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
-      // 1. CONTROLLO CONCORRENZA REALE: Qualcuno ha preso QUESTO specifico posto nell'ultimo minuto?
       const { data: spotCheck } = await supabase
         .from('bookings')
         .select('id')
@@ -138,7 +136,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
 
       if (spotCheck && spotCheck.length > 0) {
         alert("Ops! Questa postazione è stata appena selezionata o prenotata da un altro utente. Scegli un altro ombrellone.");
-        // Aggiorna localmente i posti riservati per mostrare la X rossa
         setReservedSpots(prev => [...prev, matchingSpot.id]);
         setSelectedSpotNumber(null);
         setIsSubmitting(false);
@@ -146,7 +143,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      // 2. CONTROLLO DOPPIA PRENOTAZIONE UTENTE: Ottimizzato prendendo solo i record di questa email
       const { data: existingBookings, error: fetchError } = await supabase
         .from('bookings')
         .select('id')
@@ -169,7 +165,6 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         return;
       }
 
-      // Invocazione API Route per generare la sessione Stripe
       const response = await fetch('/api/checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -197,7 +192,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     }
   };
 
-  // Spostate le file secondo la nuova disposizione della spiaggia
+  // Configurazione strutturale delle file
   const rows = [
     { startL: 1, endL: 10, startR: 11, endR: 20, center: "Bagnino" },
     { startL: 21, endL: 30, startR: 31, endR: 40, center: "P" },
@@ -208,8 +203,8 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     { startL: 121, endL: 129, startR: 130, endR: 139, center: "R" },
     { startL: 140, endL: 146, startR: 147, endR: 154, center: "E" },
     { startL: 155, endL: 160, startR: 161, endR: 167, center: "L" },
-    { startL: null, endL: null, startR: 168, endR: 171, center: "L" }, // Fila 168 spostata sotto la fila del 161-167
-    { startL: null, endL: null, startR: 172, endR: 174, center: "A" }, // Fila 172 posizionata sotto la fila del 168-171
+    { startL: null, endL: null, startR: 168, endR: 171, center: "L" }, // Fila 168-171
+    { startL: null, endL: null, startR: 172, endR: 174, center: "A" }, // Fila 172-174
   ];
 
   const renderSpot = (num: number) => {
@@ -276,6 +271,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         <div className="flex flex-col gap-3 w-[960px] mx-auto pl-2 pr-4">
           {rows.map((row, rowIndex) => (
             <div key={rowIndex} className="flex items-center justify-start gap-4">
+              {/* LATO SINISTRO */}
               <div className="w-[430px] grid grid-cols-10 gap-0.5 justify-items-start">
                 {row.startL ? (
                   <>
@@ -286,12 +282,25 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                   Array.from({ length: 10 }).map((_, i) => <div key={`blank-l-${i}`} className="w-10 h-14" />)
                 )}
               </div>
+              
+              {/* CORRIDOIO CENTRALE */}
               <div className="w-12 shrink-0 flex justify-center items-center font-black text-amber-900 uppercase text-[9px] tracking-wider bg-amber-100/90 py-2 rounded-xl border border-amber-200/50 shadow-inner">{row.center || "•"}</div>
+              
+              {/* LATO DESTRO CON MATRIX DI INCOLLONAMENTO DELLE ULTME FILE */}
               <div className="w-[430px] grid grid-cols-10 gap-0.5 justify-items-start">
                 {row.startR ? (
                   <>
+                    {/* Gestione degli spazi vuoti iniziali per incolonnare le file corte a destra */}
+                    {row.startR === 168 && Array.from({ length: 2 }).map((_, i) => <div key={`pad-168-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />)}
+                    {row.startR === 172 && Array.from({ length: 3 }).map((_, i) => <div key={`pad-172-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />)}
+                    
+                    {/* Generazione effettiva degli ombrelloni */}
                     {Array.from({ length: row.endR! - row.startR! + 1 }, (_, i) => row.startR! + i).map(renderSpot)}
-                    {Array.from({ length: 10 - (row.endR! - row.startR! + 1) }).map((_, i) => <div key={`empty-r-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />)}
+                    
+                    {/* Riempimento degli spazi vuoti finali per mantenere intatta la griglia a 10 colonne */}
+                    {row.startR !== 168 && row.startR !== 172 && Array.from({ length: 10 - (row.endR! - row.startR! + 1) }).map((_, i) => <div key={`empty-r-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />)}
+                    {row.startR === 168 && Array.from({ length: 4 }).map((_, i) => <div key={`empty-168-end-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />)}
+                    {row.startR === 172 && Array.from({ length: 4 }).map((_, i) => <div key={`empty-172-end-${i}`} className="w-10 h-14 opacity-0 pointer-events-none" />)}
                   </>
                 ) : (
                   Array.from({ length: 10 }).map((_, i) => <div key={`blank-r-${i}`} className="w-10 h-14" />)
