@@ -9,13 +9,10 @@ import {
   Search, 
   BarChart3, 
   Euro, 
-  Banknote, 
   CreditCard, 
-  Wallet, 
-  Umbrella, 
   FileText,
-  PlusCircle,
-  TrendingUp
+  TrendingUp,
+  Filter
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -46,6 +43,7 @@ export default function RegistrePrenotazioni() {
   const [loading, setLoading] = useState(true);
   const [bookings, setBookings] = useState<BookingWithSpot[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('all'); // 'all' | 'online' | 'loco'
   
   // Stati per il filtro intervallo report e tabella
   const todayStr = new Date().toISOString().split('T')[0];
@@ -96,7 +94,7 @@ export default function RegistrePrenotazioni() {
       }
       const ruolo = user.user_metadata?.ruolo || user.app_metadata?.ruolo;
       if (ruolo !== 'admin') {
-        router.push('/admin/dashboard'); // Gli operatori non vedono i registri finanziari
+        router.push('/admin/dashboard');
         return;
       }
       fetchBookingsInterval();
@@ -143,13 +141,20 @@ export default function RegistrePrenotazioni() {
   const totaleExtraSdraio = bookings.reduce((sum, b) => sum + (b.extra_sdraio || 0), 0);
   const totaleExtraLettini = bookings.reduce((sum, b) => sum + (b.extra_lettini || 0), 0);
 
-  // Filtro di ricerca testuale (Nome, Cognome, Email, Ombrellone)
+  // Filtro di ricerca incrociato: Testuale + Tipologia Canale
   const filteredBookings = bookings.filter(b => {
+    // 1. Controllo Categoria (Online / In Loco)
+    const isLoco = b.booking_category === 'Giornaliero in loco';
+    if (filterCategory === 'online' && isLoco) return false;
+    if (filterCategory === 'loco' && !isLoco) return false;
+
+    // 2. Controllo stringa di ricerca testuale
     const search = searchTerm.toLowerCase();
     const nome = (b.guest_first_name || '').toLowerCase();
     const cognome = (b.guest_last_name || '').toLowerCase();
     const email = (b.guest_email || '').toLowerCase();
     const codice = (b.spots?.internal_code || '').toLowerCase();
+    
     return nome.includes(search) || cognome.includes(search) || email.includes(search) || codice.includes(search);
   });
 
@@ -297,8 +302,8 @@ export default function RegistrePrenotazioni() {
         {/* ================= TABELLA E REGISTRO ANALITICO ================= */}
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
           
-          {/* BARRA DI RICERCA INTERNA */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-4">
+          {/* BARRA DI RICERCA INTERNA + NUOVO FILTRO STRUTTURATO */}
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
                 Elenco Analitico delle Prenotazioni
@@ -306,17 +311,37 @@ export default function RegistrePrenotazioni() {
               <p className="text-[11px] text-slate-400">Usa i filtri o la barra di ricerca per isolare record specifici</p>
             </div>
             
-            <div className="relative w-full md:w-80">
-              <span className="absolute left-3 top-2.5 text-slate-400">
-                <Search className="w-4 h-4" />
-              </span>
-              <input 
-                type="text"
-                placeholder="Cerca per nome, email o postazione..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-orange-500 font-medium"
-              />
+            <div className="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto">
+              {/* Filtro Dropdown per Canale di Vendita */}
+              <div className="relative w-full sm:w-48">
+                <span className="absolute left-3 top-2.5 text-slate-400">
+                  <Filter className="w-3.5 h-3.5" />
+                </span>
+                <select
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-orange-500 font-bold appearance-none cursor-pointer"
+                >
+                  <option value="all">Tutti i Canali</option>
+                  <option value="online">Solo Online (Stripe)</option>
+                  <option value="loco">Solo In Loco (Cassa)</option>
+                </select>
+                <span className="absolute right-3 top-3 pointer-events-none text-slate-400 text-[10px]">▼</span>
+              </div>
+
+              {/* Input di Ricerca Testuale */}
+              <div className="relative w-full sm:w-80">
+                <span className="absolute left-3 top-2.5 text-slate-400">
+                  <Search className="w-4 h-4" />
+                </span>
+                <input 
+                  type="text"
+                  placeholder="Cerca per nome, email o postazione..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-orange-500 font-medium"
+                />
+              </div>
             </div>
           </div>
 
@@ -327,7 +352,7 @@ export default function RegistrePrenotazioni() {
             </div>
           ) : filteredBookings.length === 0 ? (
             <div className="text-center py-16 text-slate-400 text-xs italic bg-slate-50/50 border border-dashed border-slate-200 rounded-2xl">
-              Nessuna prenotazione attiva trovata nell'intervallo temporale inserito.
+              Nessuna prenotazione attiva corrispondente ai filtri impostati nell'intervallo scelto.
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-100">
