@@ -316,7 +316,7 @@ export default function RegistrePrenotazioni() {
                 </div>
                 <div className="bg-white border border-slate-100 p-1.5 rounded-lg">
                   <span className="text-[8px] font-black text-slate-400 block uppercase">Altro</span>
-                  <span className="text-[11px] font-mono font-bold text-slate-700">{totro.toFixed(0)}€</span>
+                  <span className="text-[11px] font-mono font-bold text-slate-700">{totaleAltro.toFixed(0)}€</span>
                 </div>
               </div>
             </div>
