@@ -12,7 +12,8 @@ import {
   CreditCard, 
   FileText,
   TrendingUp,
-  Filter
+  Filter,
+  Download // <-- Aggiunta icona per l'export
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -50,7 +51,7 @@ export default function RegistrePrenotazioni() {
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
 
-const fetchBookingsInterval = async () => {
+  const fetchBookingsInterval = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -157,6 +158,48 @@ const fetchBookingsInterval = async () => {
     
     return nome.includes(search) || cognome.includes(search) || email.includes(search) || codice.includes(search);
   });
+
+  // --- FUNZIONE DI ESPORTAZIONE EMAIL CORRENTI (SENZA DUPLICATI) ---
+  const handleExportEmails = () => {
+    // 1. Prende solo le email dai record attualmente filtrati a schermo, rimuovendo null e stringhe vuote
+    const emailsWithNames = filteredBookings
+      .filter(b => b.guest_email && b.guest_email.trim() !== '')
+      .map(b => ({
+        email: b.guest_email!.trim().toLowerCase(),
+        nome: b.guest_first_name || '',
+        cognome: b.guest_last_name || ''
+      }));
+
+    // 2. Rimuove i duplicati basandosi sull'indirizzo email
+    const uniqueMap = new Map<string, { nome: string; cognome: string }>();
+    emailsWithNames.forEach(item => {
+      if (!uniqueMap.has(item.email)) {
+        uniqueMap.set(item.email, { nome: item.nome, cognome: item.cognome });
+      }
+    });
+
+    if (uniqueMap.size === 0) {
+      alert("Nessun indirizzo email valido da esportare con i filtri correnti.");
+      return;
+    }
+
+    // 3. Costruisce la struttura CSV (Email, Nome, Cognome)
+    let csvContent = "data:text/csv;charset=utf-8,Email,Nome,Cognome\n";
+    uniqueMap.forEach((info, email) => {
+      // Escape delle virgole per evitare rotture nel CSV
+      const riga = `"${email}","${info.nome.replace(/"/g, '""')}","${info.cognome.replace(/"/g, '""')}"`;
+      csvContent += riga + "\n";
+    });
+
+    // 4. Trigger del download del file
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `export_email_${startDate}_al_${endDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans antialiased">
@@ -273,7 +316,7 @@ const fetchBookingsInterval = async () => {
                 </div>
                 <div className="bg-white border border-slate-100 p-1.5 rounded-lg">
                   <span className="text-[8px] font-black text-slate-400 block uppercase">Altro</span>
-                  <span className="text-[11px] font-mono font-bold text-slate-700">{totaleAltro.toFixed(0)}€</span>
+                  <span className="text-[11px] font-mono font-bold text-slate-700">{totro.toFixed(0)}€</span>
                 </div>
               </div>
             </div>
@@ -302,7 +345,7 @@ const fetchBookingsInterval = async () => {
         {/* ================= TABELLA E REGISTRO ANALITICO ================= */}
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
           
-          {/* BARRA DI RICERCA INTERNA + NUOVO FILTRO STRUTTURATO */}
+          {/* BARRA DI RICERCA INTERNA + FILTRO STRUTTURATO + TASTO EXPORT */}
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
@@ -312,6 +355,18 @@ const fetchBookingsInterval = async () => {
             </div>
             
             <div className="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto">
+              
+              {/* NUOVO: Pulsante Esporta Email Esclusive (segue i filtri correnti) */}
+              <button
+                onClick={handleExportEmails}
+                disabled={loading || filteredBookings.length === 0}
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold px-3 py-2 rounded-xl transition shadow-sm disabled:cursor-not-allowed"
+                title="Esporta in CSV la lista email basata sui filtri correnti"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Esporta Email</span>
+              </button>
+
               {/* Filtro Dropdown per Canale di Vendita */}
               <div className="relative w-full sm:w-48">
                 <span className="absolute left-3 top-2.5 text-slate-400">
@@ -330,13 +385,13 @@ const fetchBookingsInterval = async () => {
               </div>
 
               {/* Input di Ricerca Testuale */}
-              <div className="relative w-full sm:w-80">
+              <div className="relative w-full sm:w-64">
                 <span className="absolute left-3 top-2.5 text-slate-400">
                   <Search className="w-4 h-4" />
                 </span>
                 <input 
                   type="text"
-                  placeholder="Cerca per nome, email o postazione..."
+                  placeholder="Cerca per nome, email..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-orange-500 font-medium"
@@ -390,7 +445,7 @@ const fetchBookingsInterval = async () => {
                           <div className="font-semibold text-slate-900">
                             {b.guest_first_name} {b.guest_last_name}
                           </div>
-                          {b.guest_phone && <div className="text-[10px] text-slate-400 font-mono">{b.guest_phone}</div>}
+                          {b.guest_email && <div className="text-[10px] text-slate-400 font-mono">{b.guest_email}</div>}
                         </td>
                         
                         {/* Categoria */}
