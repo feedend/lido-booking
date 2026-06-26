@@ -13,7 +13,7 @@ import {
   FileText,
   TrendingUp,
   Filter,
-  Download // <-- Aggiunta icona per l'export
+  Download
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -159,39 +159,28 @@ export default function RegistrePrenotazioni() {
     return nome.includes(search) || cognome.includes(search) || email.includes(search) || codice.includes(search);
   });
 
-  // --- FUNZIONE DI ESPORTAZIONE EMAIL CORRENTI (SENZA DUPLICATI) ---
+  // --- FUNZIONE DI ESPORTAZIONE SOLO EMAIL (SENZA DUPLICATI) ---
   const handleExportEmails = () => {
-    // 1. Prende solo le email dai record attualmente filtrati a schermo, rimuovendo null e stringhe vuote
-    const emailsWithNames = filteredBookings
+    // Estrae solo le stringhe email valide, pulite e in minuscolo
+    const rawEmails = filteredBookings
       .filter(b => b.guest_email && b.guest_email.trim() !== '')
-      .map(b => ({
-        email: b.guest_email!.trim().toLowerCase(),
-        nome: b.guest_first_name || '',
-        cognome: b.guest_last_name || ''
-      }));
+      .map(b => b.guest_email!.trim().toLowerCase());
 
-    // 2. Rimuove i duplicati basandosi sull'indirizzo email
-    const uniqueMap = new Map<string, { nome: string; cognome: string }>();
-    emailsWithNames.forEach(item => {
-      if (!uniqueMap.has(item.email)) {
-        uniqueMap.set(item.email, { nome: item.nome, cognome: item.cognome });
-      }
-    });
+    // Rimuove i duplicati usando il Set nativo
+    const uniqueEmails = Array.from(new Set(rawEmails));
 
-    if (uniqueMap.size === 0) {
+    if (uniqueEmails.length === 0) {
       alert("Nessun indirizzo email valido da esportare con i filtri correnti.");
       return;
     }
 
-    // 3. Costruisce la struttura CSV (Email, Nome, Cognome)
-    let csvContent = "data:text/csv;charset=utf-8,Email,Nome,Cognome\n";
-    uniqueMap.forEach((info, email) => {
-      // Escape delle virgole per evitare rotture nel CSV
-      const riga = `"${email}","${info.nome.replace(/"/g, '""')}","${info.cognome.replace(/"/g, '""')}"`;
-      csvContent += riga + "\n";
+    // Costruisce la struttura CSV con la sola colonna "Email"
+    let csvContent = "data:text/csv;charset=utf-8,Email\n";
+    uniqueEmails.forEach(email => {
+      csvContent += `"${email}"\n`;
     });
 
-    // 4. Trigger del download del file
+    // Trigger del download del file
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -356,7 +345,7 @@ export default function RegistrePrenotazioni() {
             
             <div className="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto">
               
-              {/* NUOVO: Pulsante Esporta Email Esclusive (segue i filtri correnti) */}
+              {/* Pulsante Esporta Solo Email */}
               <button
                 onClick={handleExportEmails}
                 disabled={loading || filteredBookings.length === 0}
