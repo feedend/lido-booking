@@ -50,7 +50,7 @@ export default function RegistrePrenotazioni() {
   const [startDate, setStartDate] = useState(todayStr);
   const [endDate, setEndDate] = useState(todayStr);
 
-  const fetchBookingsInterval = async () => {
+const fetchBookingsInterval = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
