@@ -64,7 +64,7 @@ export default function AdminDashboard() {
   const [dailyNotes, setDailyNotes] = useState<string>('Blocco Giornaliero');
   const [paymentMethod, setPaymentMethod] = useState<'Contanti' | 'POS' | 'Altro'>('Contanti');
 
-  // --- STATI NUOVI PER LA SELEZIONE MULTIPLA ---
+  // --- STATI PER LA SELEZIONE MULTIPLA ---
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedBulkSpots, setSelectedBulkSpots] = useState<any[]>([]);
   const [isBulkOperating, setIsBulkOperating] = useState(false);
@@ -147,11 +147,9 @@ export default function AdminDashboard() {
     try {
       const noteFinali = `[Metodo: ${paymentMethod}] ${dailyNotes || 'Assegnato da operazione multipla'}`;
       
-      // Eseguiamo i cicli di upsert/insert in parallelo controllato
       for (const spotToBlock of selectedBulkSpots) {
         let spotId = spotToBlock.id;
 
-        // 1. Se lo spot non esiste nel DB, lo inizializziamo al volo
         if (!spotId) {
           const { data: newSpot, error: createErr } = await supabase
             .from('spots')
@@ -163,7 +161,6 @@ export default function AdminDashboard() {
           spotId = newSpot.id;
         }
 
-        // 2. Operazione permanente o giornaliera
         if (blockType === 'permanent') {
           const { error: updateErr } = await supabase
             .from('spots')
@@ -171,7 +168,6 @@ export default function AdminDashboard() {
             .eq('id', spotId);
           if (updateErr) throw updateErr;
         } else {
-          // Blocco giornaliero (booking)
           const { error: upsertErr } = await supabase
             .from('bookings')
             .upsert({
@@ -342,7 +338,6 @@ export default function AdminDashboard() {
     const isManuallyBlocked = correspondingSpot ? !correspondingSpot.is_available : false;
     const isDailyLocalBlock = booking?.booking_category === 'Giornaliero in loco';
 
-    // Gestione click differenziata se siamo in Bulk Mode
     const isSelectedInBulk = selectedBulkSpots.some(s => s.internal_code === codeString);
 
     let btnClass = "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:text-slate-900";
@@ -367,7 +362,6 @@ export default function AdminDashboard() {
 
     const handleSpotClick = () => {
       if (isBulkMode) {
-        // Se c'è una prenotazione online attiva, blocca la selezione multipla per sicurezza
         if (isBooked && !isDailyLocalBlock) {
           alert(`La postazione ${codeString} ha una prenotazione ONLINE. Non puoi includerla nelle operazioni di massa.`);
           return;
@@ -379,7 +373,21 @@ export default function AdminDashboard() {
           setSelectedBulkSpots(prev => [...prev, spotDataData]);
         }
       } else {
-        setSelectedSpot({ ...spotDataData, _booking: booking });
+        // --- LOGICA DI SBLOCCO IMMEDIATO AD UN CLICK ---
+        if (isDailyLocalBlock && booking) {
+          const conferma = confirm(`Vuoi sbloccare immediatamente la postazione ${codeString} eliminando il blocco giornaliero?`);
+          if (conferma) {
+            handleRemoveDailyBooking(booking.id);
+          }
+        } else if (isManuallyBlocked) {
+          const conferma = confirm(`Vuoi riattivare la postazione ${codeString} rimuovendo il blocco permanente?`);
+          if (conferma) {
+            handleToggleSpot(spotDataData.id, false, spotDataData.internal_code);
+          }
+        } else {
+          // Se libera o prenotata online, mostra il pannello laterale classico
+          setSelectedSpot({ ...spotDataData, _booking: booking });
+        }
       }
     };
 
@@ -424,7 +432,6 @@ export default function AdminDashboard() {
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          {/* BOTTONE ATTIVAZIONE MODALITÀ DI MASSA */}
           <button
             type="button"
             onClick={() => {
@@ -608,10 +615,8 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* COLONNA DESTRA: DETTAGLIO O FORM MULTIPLO */}
+          {/* COLONNA DESTRA: PANNELLO COMPORTAMENTALE */}
           <div className="space-y-4">
-            
-            {/* FORM MULTIPLO (COMPARE SOLO SE IS_BULK_MODE È ATTIVO) */}
             {isBulkMode ? (
               <div className="bg-white border-2 border-orange-500 p-5 rounded-3xl shadow-md space-y-4 animate-in fade-in zoom-in-95 duration-150">
                 <h3 className="text-xs font-black text-orange-600 uppercase tracking-wider border-b border-slate-100 pb-3 flex items-center gap-2">
@@ -641,7 +646,7 @@ export default function AdminDashboard() {
                         onClick={() => setBlockType('daily')}
                         className={`py-1.5 text-[10px] font-black uppercase rounded-lg transition ${blockType === 'daily' ? 'bg-orange-600 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
                       >
-                        Giornaliero
+                        Dimostrazione
                       </button>
                       <button
                         type="button"
@@ -705,199 +710,121 @@ export default function AdminDashboard() {
                       type="button"
                       disabled={isBulkOperating}
                       onClick={handleBulkSubmit}
-                      className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-wider py-3 rounded-xl transition shadow disabled:opacity-50"
+                      className="w-full py-3 bg-orange-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-orange-700 transition shadow-lg shadow-orange-600/20 disabled:opacity-50"
                     >
-                      {isBulkOperating ? 'Elaborazione in corso...' : `Conferma Blocco di Massa (${selectedBulkSpots.length})`}
+                      {isBulkOperating ? 'Esecuzione in corso...' : 'Conferma Blocco Di Massa'}
                     </button>
                   </div>
                 )}
               </div>
             ) : (
-              /* ISPEZIONE SINGOLA STRUTTURA REGOLARE */
-              <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm space-y-4">
-                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-3">
-                  Ispezione Postazione
-                </h3>
-                
-                {selectedSpot ? (
-                  <div className="space-y-4 animate-in fade-in duration-150">
-                    <div className="flex items-center justify-between bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                      <span className="text-sm font-black text-slate-900 font-mono">Codice: {selectedSpot.internal_code}</span>
-                      <span className={`px-2 py-0.5 text-[9px] rounded-lg font-black uppercase border ${
-                        selectedSpot._booking?.booking_category === 'Giornaliero in loco'
-                          ? 'bg-orange-50 text-orange-700 border-orange-200'
-                          : selectedSpot.is_available ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}>
-                        {selectedSpot._booking?.booking_category === 'Giornaliero in loco' 
-                          ? 'In Loco' 
-                          : selectedSpot.is_available ? 'Attivo' : 'Bloccato'}
-                      </span>
+              /* PANNELLO DI DETTAGLIO CLASSICO (SINGOLO) */
+              selectedSpot && (
+                <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm space-y-4 animate-in fade-in slide-in-from-right-5 duration-200">
+                  <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+                    <div>
+                      <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <Umbrella className="w-4 h-4 text-blue-500" /> Postazione {selectedSpot.internal_code}
+                      </h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Configurazione Singola</p>
+                    </div>
+                    <button 
+                      onClick={() => setSelectedSpot(null)}
+                      className="text-slate-400 hover:text-slate-600 text-xs font-bold uppercase tracking-tighter"
+                    >
+                      Chiudi
+                    </button>
+                  </div>
+
+                  {/* FORM INSERIMENTO PRENOTAZIONE IN LOCO */}
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-slate-50 rounded-xl border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setBlockType('daily')}
+                        className={`py-1.5 text-[10px] font-black uppercase rounded-lg transition ${blockType === 'daily' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
+                      >
+                        Giornaliero
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBlockType('permanent')}
+                        className={`py-1.5 text-[10px] font-black uppercase rounded-lg transition ${blockType === 'permanent' ? 'bg-amber-600 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
+                      >
+                        Permanente
+                      </button>
                     </div>
 
-                    {selectedSpot._booking ? (
-                      <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-2 text-xs">
-                        <p className="text-red-700 font-black uppercase tracking-wider text-[9px] flex items-center gap-1.5">
-                          <User className="w-3.5 h-3.5" /> Informazioni Occupante:
-                        </p>
-                        <div className="space-y-1.5 text-slate-700 font-mono mt-2">
-                          <p><strong className="text-slate-400">Tipo:</strong> {selectedSpot._booking.guest_first_name} {selectedSpot._booking.guest_last_name}</p>
-                          {selectedSpot._booking.guest_email && <p><strong className="text-slate-400">Email:</strong> {selectedSpot._booking.guest_email}</p>}
-                          {selectedSpot._booking.guest_phone && <p><strong className="text-slate-400">Tel:</strong> {selectedSpot._booking.guest_phone}</p>}
-                          <p><strong className="text-slate-400">Tariffa:</strong> <span className="text-orange-600 font-bold">{selectedSpot._booking.booking_category}</span></p>
-                          {selectedSpot._booking.total_price !== undefined && (
-                            <p><strong className="text-slate-400">Pagato:</strong> <span className="text-emerald-600 font-bold">{selectedSpot._booking.total_price} €</span></p>
-                          )}
-
-                          {((selectedSpot._booking.extra_sdraio && selectedSpot._booking.extra_sdraio > 0) || 
-                            (selectedSpot._booking.extra_lettini && selectedSpot._booking.extra_lettini > 0)) && (
-                            <div className="mt-2 pt-2 border-t border-slate-200 font-sans">
-                              <span className="text-[9px] uppercase font-black text-sky-700 flex items-center gap-1 mb-1">
-                                <PlusCircle className="w-3 h-3" /> Attrezzatura Extra ordinata:
-                              </span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {selectedSpot._booking.extra_sdraio > 0 && (
-                                  <span className="bg-sky-50 border border-sky-200 text-sky-800 text-[10px] px-2 py-0.5 rounded-md font-bold">
-                                    +{selectedSpot._booking.extra_sdraio} Sdraio
-                                  </span>
-                                )}
-                                {selectedSpot._booking.extra_lettini > 0 && (
-                                  <span className="bg-sky-50 border border-sky-200 text-sky-800 text-[10px] px-2 py-0.5 rounded-md font-bold">
-                                    +{selectedSpot._booking.extra_lettini} Lettini
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {selectedSpot._booking.notes && (
-                            <p className="mt-2 pt-2 border-t border-slate-200 text-amber-800 font-sans">
-                              <strong className="text-slate-400 uppercase text-[9px] block mb-0.5">Note Interni / Metodo:</strong>
-                              {selectedSpot._booking.notes}
-                            </p>
-                          )}
-                        </div>
-                        {selectedSpot._booking.booking_category === 'Giornaliero in loco' && (
-                          <button
-                            onClick={() => handleRemoveDailyBooking(selectedSpot._booking.id)}
-                            className="w-full mt-3 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 text-[10px] font-bold uppercase tracking-wider py-1.5 rounded-lg transition"
-                          >
-                            Libera Giornaliero
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-slate-500 font-medium italic text-center py-4 bg-slate-50 rounded-xl border border-slate-200">
-                        Nessun occupante per il {new Date(filterDate).toLocaleDateString('it-IT')}.
-                      </p>
-                    )}
-
-                    {selectedSpot.notes && !selectedSpot._booking && (
-                      <div className="text-xs bg-slate-50 p-3 border border-slate-200 rounded-xl text-amber-800 font-mono">
-                        <strong className="text-slate-400 uppercase text-[9px] block mb-0.5">Motivazione Blocco Permanente:</strong> 
-                        {selectedSpot.notes}
-                      </div>
-                    )}
-
-                    <div className="space-y-3 bg-slate-50 p-4 border border-slate-200 rounded-2xl">
-                      <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Azioni Amministrative</h4>
-                      
-                      {selectedSpot.is_available && !selectedSpot._booking ? (
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-2 gap-2 p-1 bg-white rounded-xl border border-slate-200">
-                            <button
-                              type="button"
-                              onClick={() => setBlockType('daily')}
-                              className={`py-1.5 text-[10px] font-black uppercase rounded-lg transition ${blockType === 'daily' ? 'bg-orange-600 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
-                            >
-                              Giornaliero
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setBlockType('permanent')}
-                              className={`py-1.5 text-[10px] font-black uppercase rounded-lg transition ${blockType === 'permanent' ? 'bg-amber-600 text-white shadow' : 'text-slate-500 hover:text-slate-800'}`}
-                            >
-                              Permanente
-                            </button>
-                          </div>
-
-                          {blockType === 'permanent' ? (
-                            <input 
-                              type="text" 
-                              placeholder="Nota o motivo del blocco permanente..."
-                              value={noteBlock}
-                              onChange={(e) => setNoteBlock(e.target.value)}
-                              className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-amber-500 font-medium"
-                            />
-                          ) : (
-                            <div className="space-y-2">
-                              <div className="relative">
-                                <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">€</span>
-                                <input 
-                                  type="number" 
-                                  placeholder="Prezzo pagato in loco..."
-                                  value={dailyPrice}
-                                  onChange={(e) => setDailyPrice(e.target.value)}
-                                  className="w-full bg-white border border-slate-300 rounded-xl p-2.5 pl-7 text-xs text-slate-900 focus:outline-none focus:border-orange-500 font-mono font-bold"
-                                />
-                              </div>
-
-                              <div className="space-y-1">
-                                <label className="text-[9px] uppercase font-black text-slate-500 flex items-center gap-1">
-                                  <CreditCard className="w-3 h-3" /> Metodo Pagamento
-                                </label>
-                                <div className="grid grid-cols-3 gap-1 p-0.5 bg-white border border-slate-200 rounded-xl">
-                                  {(['Contanti', 'POS', 'Altro'] as const).map((method) => (
-                                    <button
-                                      key={method}
-                                      type="button"
-                                      onClick={() => setPaymentMethod(method)}
-                                      className={`py-1 text-[10px] font-bold rounded-lg transition ${paymentMethod === method ? 'bg-slate-800 text-white font-black' : 'text-slate-400 hover:text-slate-600'}`}
-                                    >
-                                      {method}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-
-                              <input 
-                                type="text" 
-                                placeholder="Note (es: Nome cliente o riferimento)..."
-                                value={dailyNotes}
-                                onChange={(e) => setDailyNotes(e.target.value)}
-                                className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-orange-500"
-                              />
-                            </div>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
-                            className={`w-full font-black text-xs uppercase tracking-wider py-2.5 rounded-xl text-white transition shadow ${blockType === 'permanent' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-orange-600 hover:bg-orange-700'}`}
-                          >
-                            Applica Blocco Singolo
-                          </button>
-                        </div>
-                      ) : (
+                    {blockType === 'permanent' ? (
+                      <div className="space-y-3">
+                        <input 
+                          type="text" 
+                          placeholder="Nota blocco permanente..."
+                          value={noteBlock}
+                          onChange={(e) => setNoteBlock(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs focus:outline-none focus:border-amber-500 font-medium"
+                        />
                         <button
                           type="button"
                           onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
-                          className="w-full bg-slate-800 hover:bg-slate-950 text-white font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition shadow"
+                          className="w-full py-3 bg-amber-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-amber-700 transition"
                         >
-                          Sblocca / Rendi Disponibile
+                          Salva Blocco Permanente
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="relative">
+                          <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">€</span>
+                          <input 
+                            type="number" 
+                            placeholder="Prezzo Giornaliero..."
+                            value={dailyPrice}
+                            onChange={(e) => setDailyPrice(e.target.value)}
+                            className="w-full bg-white border border-slate-300 rounded-xl p-2.5 pl-7 text-xs focus:outline-none focus:border-blue-500 font-mono font-bold"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-black text-slate-500 flex items-center gap-1">
+                            <CreditCard className="w-3 h-3" /> Metodo Pagamento
+                          </label>
+                          <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-50 border border-slate-200 rounded-xl">
+                            {(['Contanti', 'POS', 'Altro'] as const).map((method) => (
+                              <button
+                                key={method}
+                                type="button"
+                                onClick={() => setPaymentMethod(method)}
+                                className={`py-1 text-[10px] font-bold rounded-lg transition ${paymentMethod === method ? 'bg-slate-800 text-white font-black' : 'text-slate-400 hover:text-slate-600'}`}
+                              >
+                                {method}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <input 
+                          type="text" 
+                          placeholder="Note aggiuntive..."
+                          value={dailyNotes}
+                          onChange={(e) => setDailyNotes(e.target.value)}
+                          className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs focus:outline-none focus:border-blue-500"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSpot(selectedSpot.id, selectedSpot.is_available, selectedSpot.internal_code)}
+                          className="w-full py-3 bg-blue-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-600/20"
+                        >
+                          Assegna in Loco
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-xs text-slate-400 italic text-center py-8">
-                    Seleziona una postazione sulla planimetria per visualizzarne i dettagli o modificarne lo stato.
-                  </p>
-                )}
-              </div>
+                </div>
+              )
             )}
-
           </div>
-
         </div>
       </main>
     </div>
