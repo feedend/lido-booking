@@ -9,8 +9,10 @@ type CalendarProps = {
 export default function CalendarStep({ categoria, onDateSelect }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState('');
 
-  // Calcolo della data odierna locale con formattazione ISO pulita (Safe per Safari)
+  // 1. Calcolo della data odierna locale senza ore (Safe per Safari)
   const today = new Date();
+  today.setHours(0, 0, 0, 0); // Reset ore per confronti puliti
+
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
@@ -30,9 +32,10 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
 
   const daysAhead = getDaysAhead(categoria);
   
-  // Calcolo della data massima consentita localmente
-  const maxDate = new Date();
+  // 2. Calcolo della data massima consentita localmente senza ore
+  const maxDate = new Date(today);
   maxDate.setDate(today.getDate() + daysAhead);
+  maxDate.setHours(0, 0, 0, 0);
   
   const maxYear = maxDate.getFullYear();
   const maxMonth = String(maxDate.getMonth() + 1).padStart(2, '0');
@@ -46,14 +49,37 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
     }
   }, [daysAhead, minDateStr]);
 
-  // Gestione della conferma esplicita della data con controllo logico finale (Doppio Blocco iOS)
+  // FUNZIONE DI VERIFICA COMPATIBILE CON SAFARI (Risolve il bug iPhone)
+  const validateAndCleanDate = (inputDateStr: string): string => {
+    if (!inputDateStr) return '';
+
+    // Creiamo un oggetto Date reale basato sulla stringa YYYY-MM-DD dell'input
+    const [year, month, day] = inputDateStr.split('-').map(Number);
+    const selectedDate = new Date(year, month - 1, day);
+    selectedDate.setHours(0, 0, 0, 0);
+
+    // Confronto matematico tramite timestamp (Infallibile su iOS)
+    if (selectedDate.getTime() < today.getTime()) {
+      alert(`Attenzione: Non puoi selezionare una data passata.`);
+      return minDateStr;
+    }
+
+    if (selectedDate.getTime() > maxDate.getTime()) {
+      alert(`Attenzione: Per la tariffa "${categoria}" puoi selezionare al massimo fino al ${maxDate.toLocaleDateString('it-IT')}.`);
+      return maxDateStr; // Forza la data al massimo consentito invece di svuotarla
+    }
+
+    return inputDateStr;
+  };
+
+  // Gestione della conferma esplicita della data con controllo logico finale
   const handleConfirmDate = () => {
     if (!currentDate) return;
-
-    // Controllo di sicurezza software per iOS: se la data supera i limiti, blocca l'azione
-    if (currentDate < minDateStr || currentDate > maxDateStr) {
-      alert(`Attenzione: Per la tariffa "${categoria}" puoi selezionare solo una data compresa tra il ${dd}/${mm}/${yyyy} e il ${maxDate.toLocaleDateString('it-IT')}.`);
-      setCurrentDate(daysAhead === 0 ? minDateStr : '');
+    
+    // Ultimo controllo di sicurezza prima di passare lo stato al genitore
+    const validated = validateAndCleanDate(currentDate);
+    if (validated !== currentDate) {
+      setCurrentDate(validated);
       return;
     }
 
@@ -112,7 +138,9 @@ export default function CalendarStep({ categoria, onDateSelect }: CalendarProps)
             value={currentDate}
             className="w-full p-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-base font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-150 block"
             onChange={(e) => {
-              setCurrentDate(e.target.value);
+              // Intercettazione immediata su Safari: pulisce e valida la data appena la ruota si ferma
+              const validatedDate = validateAndCleanDate(e.target.value);
+              setCurrentDate(validatedDate);
             }}
           />
         </div>
