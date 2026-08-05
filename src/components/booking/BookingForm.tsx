@@ -201,8 +201,9 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
           <p className="text-slate-500 mt-1 pt-1 border-t border-orange-200/30 text-[11px]">
             Il prezzo finale includerà la quota base sopra indicata + il supplemento per ogni componente in base alla categoria selezionata.
           </p>
-          <p className="font-bold uppercase tracking-wide text-[10px] text-red-600 mt-1">La prenotazione NON è rimborsabile</p>
-          <p className="font-bold uppercase tracking-wide text-[10px] text-red-600 mt-1">"Se le postazioni per la data selezionata risultano esaurite, le SLL possono contattare il Direttore dello Stabilimento al 335 1888895 per essere inseriti in lista d'attesa."</p>
+          <p className="font-bold uppercase tracking-wide text-[10px] text-black-600 mt-1">La prenotazione NON è rimborsabile</p>
+           <p className="font-bold uppercase tracking-wide text-[10px] text-black-600 mt-1">NOTA:</p>
+          <p className="font-bold uppercase tracking-wide text-[10px] text-red-700 mt-1">"Se le postazioni per la data selezionata risultano esaurite, le SLL possono contattare il Direttore dello Stabilimento al 335 1888895 per essere inseriti in lista d'attesa."</p>
         </div>
 
             <div className="mb-4 text-sm text-slate-600">
