@@ -20,7 +20,7 @@ type BeachMapProps = {
     telefono?: string;
     extraSdraio: number;    
     extraLettini: number; 
-    prezzoExtra: number;     
+    prezzoExtra: number;      
   };
 };
 
@@ -222,19 +222,19 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         key={num}
         onClick={() => !isReserved && setSelectedSpotNumber(num)}
         className={`relative w-11 h-14 flex flex-col items-center justify-center transition-all duration-150 select-none shrink-0
-          ${isReserved ? 'text-gray-400 cursor-not-allowed' : 'text-orange-950 hover:scale-110 cursor-pointer'}`}
+          ${isReserved ? 'text-gray-400 cursor-not-allowed' : 'text-emerald-950 hover:scale-110 cursor-pointer'}`}
       >
-        <svg viewBox="0 0 24 24" className={`w-9 h-9 drop-shadow-sm transition-colors ${isReserved ? 'fill-gray-300' : isSelected ? 'fill-orange-600 scale-105' : 'fill-orange-400 hover:fill-orange-500'}`}>
+        <svg viewBox="0 0 24 24" className={`w-9 h-9 drop-shadow-sm transition-colors ${isReserved ? 'fill-gray-300' : isSelected ? 'fill-emerald-600 scale-105' : 'fill-emerald-500 hover:fill-emerald-600'}`}>
           <path d="M12 2C6.48 2 2 6.48 2 12h20c0-5.52-4.48-10-10-10z" />
           <path d="M12 2v10M7 4.5L12 12M17 4.5L12 12" stroke="white" strokeWidth="0.5" strokeLinecap="round" />
           <path d="M11.5 12h1v9h-1z" fill="#94a3b8" />
         </svg>
-        <span className={`text-[9px] font-black mt-0.5 px-1 rounded bg-white/90 shadow-sm border transition-all flex items-center gap-0.5 ${isReserved ? 'text-gray-400 border-gray-200' : isSelected ? 'text-orange-600 border-orange-500 ring-1 ring-orange-500/30' : 'text-orange-950 border-orange-100'}`}>
+        <span className={`text-[9px] font-black mt-0.5 px-1 rounded bg-white/90 shadow-sm border transition-all flex items-center gap-0.5 ${isReserved ? 'text-gray-400 border-gray-200' : isSelected ? 'text-emerald-700 border-emerald-500 ring-1 ring-emerald-500/30' : 'text-emerald-950 border-emerald-100'}`}>
           {num}
           {isDisabili && <span title="Postazione Accessibile Riservata" className="text-[9px]">♿</span>}
         </span>
         {isReserved && <div className="absolute top-1.5 w-6 h-6 flex items-center justify-center bg-red-500/90 text-white font-extrabold text-[9px] rounded-full shadow-md">✕</div>}
-        {isDisabili && !isReserved && !isSelected && <div className="absolute top-0 right-0 w-2 h-2 bg-orange-600 rounded-full border border-white shadow-sm" />}
+        {isDisabili && !isReserved && !isSelected && <div className="absolute top-0 right-0 w-2 h-2 bg-emerald-600 rounded-full border border-white shadow-sm" />}
       </div>
     );
   };
@@ -242,14 +242,14 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-12 bg-white rounded-3xl shadow-md max-w-sm mx-auto">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500 mb-4"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500 mb-4"></div>
         <p className="text-sm font-semibold text-slate-600">Sincronizzazione spiaggia...</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto bg-amber-50/40 p-4 sm:p-6 rounded-3xl shadow-xl border border-orange-100/70 relative">
+    <div className="w-full max-w-5xl mx-auto bg-amber-50/40 p-4 sm:p-6 rounded-3xl shadow-xl border border-emerald-100/70 relative">
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes waveMove { 0% { transform: translateX(0) translateZ(0) scaleY(1); } 50% { transform: translateX(-25%) translateZ(0) scaleY(0.85); } 100% { transform: translateX(-50%) translateZ(0) scaleY(1); } }
         .animate-wave-slow { animation: waveMove 8s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite; }
@@ -258,13 +258,14 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
         .animate-modal { animation: modalFadeIn 0.25s ease-out forwards; }
       `}} />
 
-      <div className="block md:hidden text-center text-[10px] text-orange-800/70 font-bold uppercase tracking-wider mb-2 animate-pulse">
+      <div className="block md:hidden text-center text-[10px] text-blue-800/70 font-bold uppercase tracking-wider mb-2 animate-pulse">
         ↔ Scorri lateralmente per vedere tutta la spiaggia ↔
       </div>
 
-      <div className="w-full text-center py-3.5 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 rounded-2xl shadow-md mb-6 sticky left-0">
+      {/* Banner FRONTE MARE in Blu */}
+      <div className="w-full text-center py-3.5 bg-gradient-to-r from-blue-600 via-sky-500 to-blue-700 rounded-2xl shadow-md mb-6 sticky left-0">
         <h2 className="font-black text-white uppercase tracking-wider text-xs sm:text-sm">FRONTE MARE</h2>
-        <p className="text-[10px] text-orange-50 font-medium tracking-[0.3em] uppercase mt-0.5">~~~ Mappa della Spiaggia ~~~</p>
+        <p className="text-[10px] text-blue-50 font-medium tracking-[0.3em] uppercase mt-0.5">~~~ Mappa della Spiaggia ~~~</p>
       </div>
 
       <div className="w-full overflow-x-auto pb-4 rounded-xl">
@@ -314,7 +315,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
       {selectedSpotNumber !== null && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity duration-200">
           <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl text-center border border-slate-100 overflow-hidden relative animate-modal">
-            <div className="relative h-20 bg-gradient-to-r from-orange-500 to-amber-500 flex flex-col justify-center items-center text-white overflow-hidden select-none">
+            <div className="relative h-20 bg-gradient-to-r from-emerald-600 to-teal-600 flex flex-col justify-center items-center text-white overflow-hidden select-none">
               <h3 className="text-base font-black uppercase tracking-wider relative z-10 drop-shadow-sm">Riepilogo Postazione</h3>
               <div className="absolute left-0 bottom-0 w-[200%] h-8 pointer-events-none origin-bottom">
                 <svg className="absolute left-0 bottom-0 w-full h-full text-white/20 fill-current animate-wave-slow" viewBox="0 0 1200 120" preserveAspectRatio="none"><path d="M0,60 C150,90 350,30 500,60 C650,90 850,30 1000,60 C1150,90 1350,30 1500,60 L1500,120 L0,120 Z"></path></svg>
@@ -325,7 +326,7 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
             <div className="p-6 pt-4">
               <p className="text-sm text-slate-600 mb-4">
                 Stai per riservare l'ombrellone{' '}
-                <span className="font-extrabold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100">
+                <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
                   N° {selectedSpotNumber} {POSTI_DISABILI.includes(selectedSpotNumber) ? '♿' : ''}
                 </span>.
               </p>
@@ -352,14 +353,14 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
                 <p><strong>Tariffa:</strong> {userData.categoria} {POSTI_DISABILI.includes(selectedSpotNumber) ? '(Postazione Accessibile)' : ''}</p>
               </div>
 
-              <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3.5 mb-5 flex justify-between items-center text-sm shadow-inner">
-                <span className="font-bold text-orange-950 uppercase text-xs tracking-wider">Totale da pagare:</span>
-                <span className="font-black text-lg text-orange-600">{prezzoFinale.toFixed(2)} €</span>
+              <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3.5 mb-5 flex justify-between items-center text-sm shadow-inner">
+                <span className="font-bold text-emerald-950 uppercase text-xs tracking-wider">Totale da pagare:</span>
+                <span className="font-black text-lg text-emerald-600">{prezzoFinale.toFixed(2)} €</span>
               </div>
 
               <div className="flex gap-3">
                 <button disabled={isSubmitting} onClick={() => setSelectedSpotNumber(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition-all text-sm">Annulla</button>
-                <button disabled={isSubmitting} onClick={handlePaymentAndBooking} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center min-w-[140px]">
+                <button disabled={isSubmitting} onClick={handlePaymentAndBooking} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md transition-all text-sm flex items-center justify-center min-w-[140px]">
                   {paymentProcessing ? (
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
