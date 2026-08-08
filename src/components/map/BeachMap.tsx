@@ -203,8 +203,8 @@ export default function BeachMap({ selectedDate, userData }: BeachMapProps) {
     { startL: 121, endL: 129, startR: 130, endR: 139, center: " " },
     { startL: 140, endL: 146, startR: 147, endR: 154, center: " " },
     { startL: 155, endL: 160, startR: 161, endR: 167, center: " " },
-    { startL: null, endL: null, startR: 168, endR: 171, center: " " }, // Fila 168-171
-    { startL: null, endL: null, startR: 172, endR: 174, center: " " }, // Fila 172-174
+    { startL: null, endL: null, startR: 168, endR: 171, center: "" }, // Fila 168-171
+    { startL: null, endL: null, startR: 172, endR: 174, center: "" }, // Fila 172-174
   ];
 
   const renderSpot = (num: number) => {
