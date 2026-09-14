@@ -35,7 +35,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
       setIsBlurred(false);
     }, 5000);
 
-    return () => clearTimeout(timer); // Cleanup del timer in caso di unmount
+    return () => clearTimeout(timer);
   }, []);
 
   const COSTO_PEZZO = 1.50;
@@ -85,14 +85,14 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
   return (
     <div className="relative max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-orange-100 text-slate-800 overflow-hidden">
       
-      {/* Overlay di offuscamento temporaneo (5 secondi) */}
+      {/* Overlay di offuscamento temporaneo con messaggio ben visibile */}
       {isBlurred && (
-        <div className="absolute inset-0 z-50 bg-white/70 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center transition-all duration-500">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-orange-500 mb-4"></div>
-          <p className="font-extrabold text-slate-800 text-sm uppercase tracking-wider">
+        <div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center transition-all duration-500">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent mb-4"></div>
+          <p className="font-extrabold text-slate-900 text-base uppercase tracking-wider">
             Inizializzazione Form...
           </p>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs font-semibold text-slate-600 mt-2 max-w-xs leading-relaxed">
             Attendi qualche secondo prima di procedere con la registrazione.
           </p>
         </div>
