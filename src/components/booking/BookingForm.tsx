@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,16 +27,7 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
   });
 
   const [accettaRegolamento, setAccettaRegolamento] = useState(false);
-  const [isBlurred, setIsBlurred] = useState(true);
-
-  // Timer per rimuovere l'offuscamento dopo 5 secondi (5000 ms)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsBlurred(false);
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, []);
+  const [bannerVisibile, setBannerVisibile] = useState(true);
 
   const COSTO_PEZZO = 1.50;
   const MAX_PEZZI_EXTRA = 3;
@@ -83,18 +74,32 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
   };
 
   return (
-    <div className="relative max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-orange-100 text-slate-800 overflow-hidden">
+    <div className="relative max-w-md mx-auto bg-white p-8 rounded-3xl shadow-2xl border border-orange-100 text-slate-800 overflow-hidden min-h-[500px]">
       
-      {/* Overlay di offuscamento temporaneo con messaggio ben visibile */}
-      {isBlurred && (
-        <div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center transition-all duration-500">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent mb-4"></div>
-          <p className="font-extrabold text-slate-900 text-base uppercase tracking-wider">
-            Inizializzazione Form...
-          </p>
-          <p className="text-xs font-semibold text-slate-600 mt-2 max-w-xs leading-relaxed">
-            Attendi qualche secondo prima di procedere con la registrazione.
-          </p>
+      {/* Banner Copertura Totale con solo pulsante Chiudi in alto a destra */}
+      {bannerVisibile && (
+        <div className="absolute inset-0 z-50 bg-gradient-to-br from-amber-500 via-orange-500 to-amber-600 text-white p-8 flex flex-col justify-center items-center text-center animate-fadeIn">
+          <button
+            type="button"
+            onClick={() => setBannerVisibile(false)}
+            className="absolute top-4 right-4 bg-black/20 hover:bg-black/40 text-white w-9 h-9 rounded-full flex items-center justify-center font-bold text-lg backdrop-blur-md transition-all cursor-pointer border border-white/20"
+            title="Chiudi e vai al form"
+          >
+            ✕
+          </button>
+
+          <div className="max-w-xs space-y-4">
+            <span className="text-5xl block animate-bounce">📢</span>
+            <h3 className="font-black text-xl uppercase tracking-wider text-amber-100">
+              Apertura Straordinaria
+            </h3>
+            <p className="text-sm font-medium leading-relaxed text-white">
+              Si avvisa la gentile clientela che il lido sarà aperto anche nelle giornate del <strong className="underline decoration-white decoration-2">25, 26 e 27 Settembre</strong>.
+            </p>
+            <p className="text-[11px] text-amber-100/80 pt-2 uppercase tracking-widest font-semibold">
+              Clicca la ✕ in alto per registrati
+            </p>
+          </div>
         </div>
       )}
 
@@ -254,9 +259,9 @@ export default function BookingForm({ onComplete }: { onComplete: (data: UserDat
         
         <button 
           type="submit" 
-          disabled={!accettaRegolamento || isBlurred}
+          disabled={!accettaRegolamento}
           className={`w-full font-bold py-4 rounded-xl shadow-lg mt-2 transition text-sm uppercase tracking-wider ${
-            accettaRegolamento && !isBlurred
+            accettaRegolamento 
               ? 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer shadow-orange-500/20' 
               : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
           }`}
